@@ -258,11 +258,17 @@ def generate_config_lua(uir: UIR, out: TextIO) -> None:
         for gc in configs:
             if gc.value_type == "bool":
                 lua_val = "true" if gc.value in ("1", "true", "YES") else "false"
-            elif gc.value_type in ("int", "room_vnum"):
+            elif gc.value_type == "int":
                 lua_val = gc.value
+            elif gc.value_type == "room_vnum":
+                lua_val = _lua_str(gc.value)
             else:
                 lua_val = _lua_str(gc.value)
-            out.write(f"    {gc.key} = {lua_val},\n")
+            # Use ["key"] syntax for keys with spaces or non-identifier chars
+            if gc.key.isidentifier():
+                out.write(f"    {gc.key} = {lua_val},\n")
+            else:
+                out.write(f"    [{_lua_str(gc.key)}] = {lua_val},\n")
         out.write("}\n\n")
 
     out.write("return Config\n")

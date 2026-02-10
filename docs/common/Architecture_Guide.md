@@ -1,6 +1,6 @@
 # GenOS Migration Tool 아키텍처 가이드
 
-**Version**: 4.0
+**Version**: 5.0
 **Last Updated**: 2026-02-10
 
 ---
@@ -76,17 +76,31 @@ src/genos/
 │   │   ├── cmd_parser.py    # Simoon Commands — EUC-KR + 5필드 (Phase 2)
 │   │   └── config_parser.py # Simoon Config — circlemud 재사용 + titles 파서 (Phase 3)
 │   │
-│   └── threeeyes/           # 3eyes 어댑터 (8 파서, 바이너리 C 구조체)
+│   ├── threeeyes/           # 3eyes 어댑터 (8 파서, 바이너리 C 구조체)
+│   │   ├── __init__.py
+│   │   ├── adapter.py       # ThreeEyesAdapter (바이너리 파싱 오케스트레이터)
+│   │   ├── binary_utils.py  # struct 읽기, EUC-KR 문자열, 플래그 변환
+│   │   ├── constants.py     # 플래그/타입/클래스/종족/스펠 매핑
+│   │   ├── obj_parser.py    # 352-byte object 바이너리 파서
+│   │   ├── mob_parser.py    # 1184-byte creature 바이너리 파서
+│   │   ├── room_parser.py   # 480-byte + 가변길이 room 바이너리 파서
+│   │   ├── help_parser.py   # EUC-KR 텍스트 도움말 파서
+│   │   ├── talk_parser.py   # 몬스터 대화/설명 텍스트 파서
+│   │   └── config_parser.py # 3eyes Config — global.c 배열 파싱 (Phase 3)
+│   │
+│   └── lpmud/               # LP-MUD/FluffOS 어댑터 (9 파서, LPC 소스 코드)
 │       ├── __init__.py
-│       ├── adapter.py       # ThreeEyesAdapter (바이너리 파싱 오케스트레이터)
-│       ├── binary_utils.py  # struct 읽기, EUC-KR 문자열, 플래그 변환
-│       ├── constants.py     # 플래그/타입/클래스/종족/스펠 매핑
-│       ├── obj_parser.py    # 352-byte object 바이너리 파서
-│       ├── mob_parser.py    # 1184-byte creature 바이너리 파서
-│       ├── room_parser.py   # 480-byte + 가변길이 room 바이너리 파서
-│       ├── help_parser.py   # EUC-KR 텍스트 도움말 파서
-│       ├── talk_parser.py   # 몬스터 대화/설명 텍스트 파서
-│       └── config_parser.py # 3eyes Config — global.c 배열 파싱 (Phase 3)
+│       ├── adapter.py       # LPMudAdapter (LPC 파싱 오케스트레이터)
+│       ├── lpc_parser.py    # LPC 코드 파싱 유틸 (14개 함수)
+│       ├── vnum_generator.py # 파일 경로 → SHA-256 VNUM 생성
+│       ├── room_parser.py   # LIB_ROOM 파싱 (2-패스 출구 해결)
+│       ├── mob_parser.py    # LIB_MONSTER 파싱 (randomStat 레벨)
+│       ├── obj_parser.py    # LIB_WEAPON/ARMOR/ITEM 파싱
+│       ├── class_parser.py  # 직업.h JobData 매핑 파싱 (14 직업)
+│       ├── skill_parser.py  # 기술.h SkillData 매핑 파싱 (51 기술)
+│       ├── help_parser.py   # .help 파일 파싱
+│       ├── command_parser.py # getCMD() 명령어 파싱
+│       └── config_parser.py # 세팅.h + woong.cfg + 전투.h + monster.c 공식
 │
 └── compiler/                # UIR → 타겟 변환
     ├── __init__.py
@@ -104,7 +118,9 @@ src/genos/
 
 ```
 detector.py (_ADAPTER_ORDER 우선순위)
-  ├─ ThreeEyesAdapter.detect()   ← 가장 구체적
+  ├─ LPMudAdapter.detect()       ← 가장 구체적 (bin/driver + lib/구조/ + inherit LIB_)
+  │   └─ bin/driver OR bin/fluffos* + lib/구조/ OR lib/삽입파일/ + .c에 inherit LIB_
+  ├─ ThreeEyesAdapter.detect()
   │   └─ rooms/r{nn}/ + objmon/m{nn},o{nn} + 파일 크기가 struct_size의 배수
   ├─ SimoonAdapter.detect()
   │   └─ lib/world/ + EUC-KR .zon 파일 존재 확인
@@ -185,6 +201,35 @@ ThreeEyesAdapter.parse()    ★ 바이너리 C 구조체 파싱
   ├─ _threeeyes_classes()                      →  list[CharacterClass] (8클래스)
   ├─ _threeeyes_races()                        →  list[Race] (8종족)
   ├─ _threeeyes_spells()                       →  list[Skill] (63스펠)
+  │
+  └─ 조합 → UIR 객체
+
+LPMudAdapter.parse()    ★ LPC 소스 코드 파싱 (regex 기반 setXxx() 추출)
+  │
+  │ Phase 1 — 헤더 데이터 (lib/삽입파일/)
+  ├─ class_parser.parse_classes(직업.h)         →  list[CharacterClass] (14직업)
+  ├─ skill_parser.parse_skills(기술.h)          →  list[Skill] (51기술)
+  │
+  │ Phase 2 — 월드 데이터 (lib/방/, lib/물체/)
+  ├─ room_parser.parse_all_rooms()              →  list[Room] (17,590방)
+  │   └─ 2-패스: 1패스(파싱+경로수집), 2패스(VNUM 해결)
+  ├─ mob_parser.parse_all_monsters()            →  list[Monster] (947몬스터)
+  │   └─ lib/방/*/mob/*.c + lib/물체/ 중 inherit LIB_MONSTER
+  ├─ obj_parser.parse_all_items()               →  list[Item] (969아이템)
+  │   └─ lib/물체/*.c + lib/방/*/obj/*.c
+  │
+  │ Phase 3 — 보조 데이터
+  ├─ help_parser.parse_all_help(도움말/)         →  list[HelpEntry] (72항목)
+  ├─ command_parser.parse_all_commands(명령어/)  →  list[Command] (51항목)
+  │
+  │ Phase 4 — 게임 설정 (세팅.h + woong.cfg + 전투.h + monster.c)
+  ├─ config_parser.parse_settings_header()      →  list[GameConfig] (설정)
+  ├─ config_parser.parse_driver_config()        →  list[GameConfig] (드라이버)
+  ├─ config_parser.parse_combat_header()        →  list[GameConfig] (전투상수)
+  ├─ config_parser.parse_stat_formulas()        →  list[GameConfig] (공식)
+  │
+  │ 추론 데이터
+  ├─ _infer_zones()                             →  list[Zone] (122존, 디렉토리 기반)
   │
   └─ 조합 → UIR 객체
 ```
@@ -274,6 +319,21 @@ Phase 4는 한국어 SOV(주어-목적어-동사) 어순 명령어 파서를 위
 - **Python 참조 구현**: `korean_nlp_generator.py`에 Lua 로직을 미러링한 Python 함수 포함 → 단위 테스트 가능
 - **엔진 분리 예정**: NLP 로직은 향후 엔진 빌트인으로 이동, 마이그레이션 출력은 데이터 테이블만 유지
 
+### 1.8. LP-MUD/FluffOS 어댑터 (LPC 소스 코드 파싱)
+
+10woongi LP-MUD는 기존 3개 어댑터와 근본적으로 다른 데이터 형식입니다:
+- **LPC 소스 코드**: 각 엔티티가 개별 `.c` 파일, `setXxx()` 호출로 데이터 정의
+- **VNUM 없음**: 파일 경로 SHA-256 해시로 안정적 정수 VNUM 생성 (VnumGenerator)
+- **2-패스 출구 해결**: 1패스에서 경로 수집, 2패스에서 VNUM 변환
+- **LPC 매핑/배열**: `([ key : value ])`, `({ elem })` 구문을 regex로 파싱
+
+핵심 설계 결정:
+- **regex 기반 파싱**: 완전한 LPC 파서 대신 `setXxx()` 패턴만 추출 — 충분하고 빠름
+- **inherit 기반 타입 분류**: `inherit LIB_WEAPON` → item_type=5 등으로 엔티티 타입 결정
+- **VnumGenerator 충돌 해결**: SHA-256 해시 충돌 시 linear probing으로 자동 해결
+- **Zone 추론**: 디렉토리 구조에서 존을 자동 추론 (lib/방/관도/ → 관도 존)
+- **백업 디렉토리 무시**: `방0~방5`는 스킵, `방`만 파싱
+
 ### 2. Bitvector → 비트 위치 리스트
 
 소스에서는 정수 비트마스크(`8`, `ae` 등)를 사용하지만, UIR에서는 설정된 비트 위치의 리스트(`[3, 4]`)로 변환합니다. 이유:
@@ -347,11 +407,14 @@ class MyMudAdapter(BaseAdapter):
 
 | 어댑터 | 파서 수 | 파싱 방식 | 주요 파서 | 비고 |
 |--------|---------|-----------|-----------|------|
+| LPMudAdapter | 9 | LPC 소스 (regex setXxx()) | lpc/room/mob/obj/class/skill/help/cmd + config | EUC-KR, SHA-256 VNUM, 14직업/51기술 |
 | ThreeEyesAdapter | 8 | 바이너리 (struct.unpack) + C소스 | obj/mob/room/help/talk + config | EUC-KR, 8클래스/8종족/63스펠 |
 | SimoonAdapter | 11 | 텍스트 (줄 단위) + C소스 | wld/obj/mob/zon/qst + shp(공유) + help/cmd/skill + config | EUC-KR, 5종족/7클래스 |
 | CircleMudAdapter | 12 | 텍스트 (줄 단위) + C소스 | wld/obj/mob/zon/trg/shp/qst + social/help/cmd/skill + config | tbaMUD 128-bit |
 
-**감지 우선순위**: ThreeEyes > Simoon > CircleMud (구체적 → 일반적 순서).
+**감지 우선순위**: LPMud > ThreeEyes > Simoon > CircleMud (구체적 → 일반적 순서).
+**LP-MUD 특이점**: 데이터 파일이 아닌 LPC 소스 코드 파싱 — VNUM이 없어 파일 경로 해시로 생성, 2-패스 출구 해결 필요.
+**LP-MUD config**: 4개 소스 파일 통합 (세팅.h + woong.cfg + 전투.h + monster.c 공식).
 **공유 파서**: social_parser, config_parser(일부)는 circlemud 패키지에 구현, Simoon이 encoding 파라미터만 다르게 호출.
 **Simoon 래퍼**: help_parser, cmd_parser는 simoon/ 에 thin wrapper로 존재 (EUC-KR + 포맷 차이 대응).
 **Simoon config**: circlemud config_parser 재사용 + titles/train_params 고유 파서.
@@ -367,31 +430,34 @@ class MyMudAdapter(BaseAdapter):
 | tbaMUD | ~23K | ~2초 | ~5초 |
 | Simoon | ~10K | ~1초 | ~3초 |
 | 3eyes | ~10K | ~2초 | ~4초 |
+| 10woongi | ~20K | ~3초 | ~6초 |
 
-tbaMUD 출력 크기 (가장 큰 소스):
-- UIR YAML: ~878K lines, ~40MB
-- SQL seed: ~104K lines, ~17MB
-- Lua 8개: combat + classes + triggers + config + exp_tables + stat_tables + korean_nlp + korean_commands (~1.6MB)
+출력 크기 비교:
+| 소스 | UIR YAML | SQL seed | Lua |
+|------|----------|----------|-----|
+| tbaMUD | ~40MB | ~17MB | ~1.6MB (8개) |
+| 10woongi | ~16MB | ~14MB | ~17KB (5개) |
 
 ## 데이터 규모 비교
 
-| 항목 | tbaMUD | Simoon | 3eyes |
-|------|--------|--------|-------|
-| Rooms | 12,700 | 6,508 | 7,439 |
-| Items | 4,765 | 1,753 | 1,362 |
-| Monsters | 3,705 | 1,374 | 1,394 |
-| Zones | 189 | 128 | 103 |
-| Shops | 334 | 103 | — |
-| Help | 721 | 2,220 | 116 |
-| Triggers | 1,461 | — | — |
-| Classes | 14 | 7 | 8 |
-| Races | — | 5 | 8 |
-| Spells/Skills | 65 | 121 | 63 |
-| **Phase 3** | | | |
-| Game Configs | 54 | 36 | — |
-| Exp Table | 128 | 314 | 203 |
-| THAC0 Table | 140 | — | 160 |
-| Saving Throws | 870 | — | — |
-| Level Titles | 204 | 628 | — |
-| Attr Modifiers | 161 | 168 | 160 |
-| Practice Params | 4 | 7 | — |
+| 항목 | tbaMUD | Simoon | 3eyes | 10woongi |
+|------|--------|--------|-------|----------|
+| Rooms | 12,700 | 6,508 | 7,439 | **17,590** |
+| Items | 4,765 | 1,753 | 1,362 | 969 |
+| Monsters | 3,705 | 1,374 | 1,394 | 947 |
+| Zones | 189 | 128 | 103 | 122 |
+| Shops | 334 | 103 | — | — |
+| Help | 721 | 2,220 | 116 | 72 |
+| Triggers | 1,461 | — | — | — |
+| Commands | 275 | 546 | — | 51 |
+| Classes | 14 | 7 | 8 | 14 |
+| Races | — | 5 | 8 | — |
+| Spells/Skills | 65 | 121 | 63 | 51 |
+| **Phase 3** | | | | |
+| Game Configs | 54 | 36 | — | 98 |
+| Exp Table | 128 | 314 | 203 | — |
+| THAC0 Table | 140 | — | 160 | — |
+| Saving Throws | 870 | — | — | — |
+| Level Titles | 204 | 628 | — | — |
+| Attr Modifiers | 161 | 168 | 160 | — |
+| Practice Params | 4 | 7 | — | — |

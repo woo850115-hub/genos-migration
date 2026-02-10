@@ -13,6 +13,7 @@ _adapters_loaded: bool = False
 # Adapters listed earlier have higher priority (checked first).
 # More specific adapters should come before generic fallbacks.
 _ADAPTER_ORDER: list[str] = [
+    "LPMudAdapter",      # LP-MUD: LPC source files (FluffOS/MudOS)
     "ThreeEyesAdapter",  # 3eyes: binary C struct format (most specific)
     "SimoonAdapter",     # Simoon: specific (requires HANGUL.TXT)
     "CircleMudAdapter",  # CircleMUD/tbaMUD: generic fallback
@@ -56,6 +57,7 @@ def _ensure_adapters_loaded() -> None:
     global _adapters_loaded
     if not _adapters_loaded:
         _adapters_loaded = True
+        import genos.adapters.lpmud      # noqa: F401
         import genos.adapters.threeeyes  # noqa: F401
         import genos.adapters.simoon     # noqa: F401
         import genos.adapters.circlemud  # noqa: F401
