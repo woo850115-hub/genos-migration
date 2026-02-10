@@ -964,7 +964,23 @@ Tier 3: 복잡한 명령어 (수동)
 
 ---
 
-### Phase 4: 폴리싱 (Week 13+)
+### Phase 4: 한국어 자연어순 명령어 체계 (Week 13-14) — 완료
+
+**목표**: 한국어 SOV 명령어 파서 Lua 생성
+
+```markdown
+✅ korean_nlp.lua (한국어 NLP 유틸 — 받침, 조사, 어간 추출)
+✅ korean_commands.lua (SOV 파서 + 동사/방향/스펠 매핑)
+✅ Python 참조 구현 (has_batchim, strip_particle, extract_stem, parse)
+✅ UIR 스킬 한국어 이름 연동 (extensions["korean_name"] → SPELL_NAMES)
+✅ 3개 소스 모두 한국어 Lua 생성 확인 (tbaMUD, Simoon, 3eyes)
+
+결과: 한국어 자연어순 명령어 체계 완성 (69개 테스트)
+```
+
+---
+
+### Phase 5: 폴리싱 (향후)
 
 **목표**: 문서화 및 도구 개선
 
@@ -1069,7 +1085,14 @@ Tier 3: 복잡한 명령어 (수동)
 - [x] Practice Params          [C,S] class.c 파싱 → SQL (tbaMUD 4, Simoon 7)
 ```
 
-### P3-P4 - 미구현
+### P4 - 한국어 명령어 체계 (Phase 4 완료)
+
+```markdown
+- [x] korean_nlp.lua           [C,S,3] 항상 생성 — UTF-8 한글 NLP 유틸리티
+- [x] korean_commands.lua      [C,S,3] 항상 생성 — SOV 파서 + 동사 60개 + 방향어 + 스펠 매핑
+```
+
+### 미구현
 
 ```markdown
 - [ ] Weather/Time (날씨/시간) 설정값만 추출
@@ -1129,7 +1152,19 @@ Tier 3: 복잡한 명령어 (수동)
 | Lua 스크립트 | +3 | config+exp+stat | config+exp+stat | exp+stat | 달성 |
 | 테스트 | 전체 통과 | 191 tests pass | 191 tests pass | 191 tests pass | 달성 |
 
-### Phase 4 (폴리싱) - 미착수
+### Phase 4 (한국어 명령어 체계) - 완료
+
+| 기준 | 목표 | 실제 (tbaMUD) | 실제 (Simoon) | 실제 (3eyes) | 상태 |
+|------|------|---------------|---------------|--------------|------|
+| korean_nlp.lua | 생성 | 생성 | 생성 | 생성 | 달성 |
+| korean_commands.lua | 생성 | 생성 | 생성 | 생성 | 달성 |
+| 표준 동사 | 55개+ | 60개 | 60개 | 60개 | 달성 |
+| 방향어 | 14개+ | 14개 | 14개 | 14개 | 달성 |
+| SOV 파서 | 동작 | 동작 | 동작 | 동작 | 달성 |
+| SVO 폴백 | 동작 | 동작 | 동작 | 동작 | 달성 |
+| 테스트 | 전체 통과 | 260 tests pass | 260 tests pass | 260 tests pass | 달성 |
+
+### Phase 5 (폴리싱) - 미착수
 
 - [ ] 수동 작업 가이드 완성
 - [ ] 사용자 매뉴얼 완성
@@ -1165,6 +1200,6 @@ Tier 3: 복잡한 명령어 (수동)
 
 ---
 
-**문서 버전**: 1.3
-**최종 업데이트**: 2026-02-10 — Phase 3 완료 반영 (Game Config, Exp Table, THAC0, Saving Throws, Titles, Attr Mods, Practice Params)
+**문서 버전**: 1.4
+**최종 업데이트**: 2026-02-10 — Phase 4 완료 반영 (한국어 NLP 명령어 체계: korean_nlp.lua, korean_commands.lua, SOV 파서)
 **피드백**: 마이그레이션 진행하면서 계속 개선

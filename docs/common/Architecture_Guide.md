@@ -1,6 +1,6 @@
 # GenOS Migration Tool 아키텍처 가이드
 
-**Version**: 3.0
+**Version**: 4.0
 **Last Updated**: 2026-02-10
 
 ---
@@ -90,9 +90,10 @@ src/genos/
 │
 └── compiler/                # UIR → 타겟 변환
     ├── __init__.py
-    ├── compiler.py          # GenosCompiler (출력 오케스트레이터)
-    ├── db_generator.py      # PostgreSQL DDL(21 테이블) + INSERT 생성
-    └── lua_generator.py     # Lua 스크립트 생성 (6종류)
+    ├── compiler.py              # GenosCompiler (출력 오케스트레이터)
+    ├── db_generator.py          # PostgreSQL DDL(21 테이블) + INSERT 생성
+    ├── lua_generator.py         # Lua 스크립트 생성 (6종류)
+    └── korean_nlp_generator.py  # 한국어 NLP Lua 생성 (Phase 4: korean_nlp.lua + korean_commands.lua)
 ```
 
 ---
@@ -207,9 +208,11 @@ GenosCompiler.compile()
   ├─ lua_generator.generate_combat_lua()      →  lua/combat.lua
   ├─ lua_generator.generate_class_lua()       →  lua/classes.lua
   ├─ lua_generator.generate_trigger_lua()     →  lua/triggers.lua
-  ├─ lua_generator.generate_config_lua()      →  lua/config.lua      (Phase 3)
-  ├─ lua_generator.generate_exp_table_lua()   →  lua/exp_tables.lua  (Phase 3)
-  └─ lua_generator.generate_stat_tables_lua() →  lua/stat_tables.lua (Phase 3)
+  ├─ lua_generator.generate_config_lua()      →  lua/config.lua          (Phase 3)
+  ├─ lua_generator.generate_exp_table_lua()   →  lua/exp_tables.lua      (Phase 3)
+  ├─ lua_generator.generate_stat_tables_lua() →  lua/stat_tables.lua     (Phase 3)
+  ├─ korean_nlp_generator.generate_korean_nlp_lua()      →  lua/korean_nlp.lua       (Phase 4, 항상)
+  └─ korean_nlp_generator.generate_korean_commands_lua() →  lua/korean_commands.lua  (Phase 4, 항상)
 ```
 
 **SQL 테이블 목록** (Phase 1 + Phase 2 + Phase 3):
@@ -254,6 +257,22 @@ Phase 3는 C 소스 코드에서 게임 밸런스/설정 데이터를 추출합�
 - **Simoon은 CircleMUD 파서 재사용**: encoding 파라미터만 `euc-kr`로 전달
 - **triple-nested switch 파싱**: saving_throws 함수의 class→save_type→level 3중 중첩 switch/case 파싱
 - **3eyes level_cycle은 extensions**: 다른 소스에 없는 고유 데이터는 `uir.extensions`에 저장
+
+### 1.7. Phase 4: 한국어 자연어순 명령어 체계 (Korean NLP Command System)
+
+Phase 4는 한국어 SOV(주어-목적어-동사) 어순 명령어 파서를 위한 Lua를 생성합니다:
+- **korean_nlp.lua**: UTF-8 한글 유틸리티 (받침 검사, 조사 선택/스트리핑, 동사 어간 추출)
+- **korean_commands.lua**: 표준 동사 매핑 (~60개) + 방향어 + SOV 파서 + SVO 폴백
+
+핵심 설계 결정:
+- **항상 생성**: 조건부가 아님. 영어 소스(tbaMUD)에서도 한국어 명령어 Lua를 생성
+- **UIR 스키마 변경 없음**: 한국어 동사 어휘는 GenOS 표준이므로 소스별 데이터가 아닌 컴파일러 내장
+- **UTF-8 기반**: Unicode 수학으로 받침 판별 `(cp - 0xAC00) % 28`
+- **SOV 우선 + SVO 폴백**: 마지막 토큰부터 동사 탐색, 실패 시 첫 토큰 시도 (기존 MUD 호환)
+- **의미역(semantic role) 기반**: 조사에서 target/object/instrument/location/direction 추출
+- **UIR 스킬 연동**: `skill.extensions["korean_name"]`이 있으면 `SPELL_NAMES` 테이블에 자동 포함
+- **Python 참조 구현**: `korean_nlp_generator.py`에 Lua 로직을 미러링한 Python 함수 포함 → 단위 테스트 가능
+- **엔진 분리 예정**: NLP 로직은 향후 엔진 빌트인으로 이동, 마이그레이션 출력은 데이터 테이블만 유지
 
 ### 2. Bitvector → 비트 위치 리스트
 
@@ -352,7 +371,7 @@ class MyMudAdapter(BaseAdapter):
 tbaMUD 출력 크기 (가장 큰 소스):
 - UIR YAML: ~878K lines, ~40MB
 - SQL seed: ~104K lines, ~17MB
-- Lua 6개: combat + classes + triggers + config + exp_tables + stat_tables (~1.5MB)
+- Lua 8개: combat + classes + triggers + config + exp_tables + stat_tables + korean_nlp + korean_commands (~1.6MB)
 
 ## 데이터 규모 비교
 

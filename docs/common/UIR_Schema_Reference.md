@@ -1,6 +1,6 @@
 # UIR (Universal Intermediate Representation) 스키마 참조
 
-**Version**: 3.0
+**Version**: 4.0
 **정의 파일**: `src/genos/uir/schema.py`
 **JSON Schema**: `schema/uir.schema.json`
 

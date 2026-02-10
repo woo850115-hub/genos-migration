@@ -8,6 +8,10 @@ from pathlib import Path
 from genos.uir.schema import UIR
 
 from .db_generator import generate_ddl, generate_seed_data
+from .korean_nlp_generator import (
+    generate_korean_commands_lua,
+    generate_korean_nlp_lua,
+)
 from .lua_generator import (
     generate_class_lua,
     generate_combat_lua,
@@ -85,6 +89,17 @@ class GenosCompiler:
             with open(stat_path, "w") as f:
                 generate_stat_tables_lua(self.uir, f)
             generated[str(stat_path)] = "Stat modifier tables"
+
+        # Phase 4: Korean NLP (always generated)
+        nlp_path = lua_dir / "korean_nlp.lua"
+        with open(nlp_path, "w") as f:
+            generate_korean_nlp_lua(f)
+        generated[str(nlp_path)] = "Korean NLP utilities"
+
+        cmd_path = lua_dir / "korean_commands.lua"
+        with open(cmd_path, "w") as f:
+            generate_korean_commands_lua(self.uir, f)
+        generated[str(cmd_path)] = "Korean command interpreter"
 
         logger.info("Compiled %d artifacts to %s", len(generated), self.output_dir)
         return generated
