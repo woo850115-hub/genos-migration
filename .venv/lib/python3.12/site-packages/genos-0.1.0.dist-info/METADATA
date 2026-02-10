@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: genos
+Version: 0.1.0
+Summary: GenOS Migration Tool - MUD to Modern Game Platform
+Requires-Python: >=3.10
+Requires-Dist: click>=8.1
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: jsonschema>=4.17
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0; extra == "dev"

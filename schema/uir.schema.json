@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UIR - Universal Intermediate Representation",
+  "description": "Schema for MUD game data in GenOS migration format",
+  "type": "object",
+  "properties": {
+    "uir_version": { "type": "string" },
+    "source_mud": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "codebase": { "type": "string" },
+        "source_path": { "type": "string" }
+      },
+      "required": ["name", "codebase"]
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "game_name": { "type": "string" },
+        "num_classes": { "type": "integer" },
+        "num_directions": { "type": "integer" },
+        "num_item_types": { "type": "integer" },
+        "num_equip_slots": { "type": "integer" }
+      }
+    },
+    "rooms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "vnum": { "type": "integer" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "zone_number": { "type": "integer" },
+          "sector_type": { "type": "integer" },
+          "room_flags": { "type": "array", "items": { "type": "integer" } },
+          "exits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "direction": { "type": "integer", "minimum": 0, "maximum": 9 },
+                "destination": { "type": "integer" },
+                "door_flags": { "type": "integer" },
+                "key_vnum": { "type": "integer" }
+              },
+              "required": ["direction", "destination"]
+            }
+          },
+          "trigger_vnums": { "type": "array", "items": { "type": "integer" } }
+        },
+        "required": ["vnum"]
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "vnum": { "type": "integer" },
+          "keywords": { "type": "string" },
+          "short_description": { "type": "string" },
+          "item_type": { "type": "integer" },
+          "extra_flags": { "type": "array", "items": { "type": "integer" } },
+          "wear_flags": { "type": "array", "items": { "type": "integer" } },
+          "values": { "type": "array", "items": { "type": "integer" } },
+          "weight": { "type": "integer" },
+          "cost": { "type": "integer" },
+          "affects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "location": { "type": "integer" },
+                "modifier": { "type": "integer" }
+              }
+            }
+          }
+        },
+        "required": ["vnum"]
+      }
+    },
+    "monsters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "vnum": { "type": "integer" },
+          "keywords": { "type": "string" },
+          "short_description": { "type": "string" },
+          "level": { "type": "integer" },
+          "hp_dice": { "type": "object" },
+          "damage_dice": { "type": "object" },
+          "alignment": { "type": "integer" },
+          "trigger_vnums": { "type": "array", "items": { "type": "integer" } }
+        },
+        "required": ["vnum"]
+      }
+    },
+    "zones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "vnum": { "type": "integer" },
+          "name": { "type": "string" },
+          "reset_commands": { "type": "array" }
+        },
+        "required": ["vnum"]
+      }
+    },
+    "shops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "vnum": { "type": "integer" },
+          "keeper_vnum": { "type": "integer" },
+          "selling_items": { "type": "array" }
+        },
+        "required": ["vnum"]
+      }
+    },
+    "triggers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "vnum": { "type": "integer" },
+          "name": { "type": "string" },
+          "attach_type": { "type": "integer" },
+          "script": { "type": "string" }
+        },
+        "required": ["vnum"]
+      }
+    },
+    "quests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "vnum": { "type": "integer" },
+          "name": { "type": "string" }
+        },
+        "required": ["vnum"]
+      }
+    },
+    "character_classes": { "type": "array" },
+    "combat_system": { "type": "object" },
+    "extensions": { "type": "object" }
+  },
+  "required": ["uir_version", "rooms"]
+}
