@@ -946,18 +946,20 @@ Tier 3: 복잡한 명령어 (수동)
 
 ---
 
-### Phase 3: 고급 기능 (Week 9-12)
+### Phase 3: 시스템 테이블 (Week 9-12) — 완료
 
-**목표**: 완성도 향상
+**목표**: 게임 밸런스/설정 데이터 추출
 
 ```markdown
-✅ Triggers (간단한 것)
-✅ Quests (템플릿 가능한 것)
-✅ Factions (있으면)
-✅ Titles
-✅ Weather/Time
+✅ Game Config (게임 설정 key-value)
+✅ Experience Table (경험치 테이블)
+✅ THAC0 Table (명중 판정 테이블)
+✅ Saving Throws (세이빙 스로우)
+✅ Level Titles (레벨 칭호)
+✅ Attribute Modifiers (능력치 보정)
+✅ Practice Params (연습 파라미터)
 
-결과: 풍부한 게임 경험
+결과: 전투 밸런스, 캐릭터 성장 시스템 완전 마이그레이션
 ```
 
 ---
@@ -967,10 +969,11 @@ Tier 3: 복잡한 명령어 (수동)
 **목표**: 문서화 및 도구 개선
 
 ```markdown
-✅ Special Procedures (가이드)
-✅ 마이그레이션 도구 개선
-✅ 사용자 매뉴얼
-✅ 예제 프로젝트
+⬜ Weather/Time (날씨/시간 설정)
+⬜ Special Procedures (가이드)
+⬜ 마이그레이션 도구 개선
+⬜ 사용자 매뉴얼
+⬜ 예제 프로젝트
 
 결과: 커뮤니티 출시 준비
 ```
@@ -1020,7 +1023,7 @@ Tier 3: 복잡한 명령어 (수동)
 | [~] | 부분 구현 (일부만 완료) |
 | [ ] | 미구현 |
 
-**어댑터 지원**: C = CircleMudAdapter, S = SimoonAdapter
+**어댑터 지원**: C = CircleMudAdapter, S = SimoonAdapter, 3 = ThreeEyesAdapter
 
 ---
 
@@ -1054,10 +1057,21 @@ Tier 3: 복잡한 명령어 (수동)
 - [ ] Factions/Alignment       해당 MUD에 존재 시
 ```
 
-### P3-P4 - 선택/참고
+### P3 - 시스템 테이블 (Phase 3 완료)
 
 ```markdown
-- [ ] Titles (칭호)            C 소스코드에서 추출 필요
+- [x] Game Config (게임설정)   [C,S] config.c 파싱 → SQL+Lua (tbaMUD 54개, Simoon 36개)
+- [x] Exp Table (경험치)       [C,S,3] class.c/global.c 파싱 → SQL+Lua (tbaMUD 128, Simoon 314, 3eyes 203)
+- [x] THAC0 Table              [C,3] class.c/global.c 파싱 → SQL+Lua (tbaMUD 140, 3eyes 160)
+- [x] Saving Throws            [C] class.c 3중 switch 파싱 → SQL+Lua (tbaMUD 870)
+- [x] Level Titles (칭호)      [C,S] class.c 파싱 → SQL (tbaMUD 204, Simoon 628)
+- [x] Attr Modifiers (능력치)  [C,S,3] constants.c/global.c 파싱 → SQL+Lua (tbaMUD 161, Simoon 168, 3eyes 160)
+- [x] Practice Params          [C,S] class.c 파싱 → SQL (tbaMUD 4, Simoon 7)
+```
+
+### P3-P4 - 미구현
+
+```markdown
 - [ ] Weather/Time (날씨/시간) 설정값만 추출
 - [ ] Special Procedures       C 소스코드 목록 추출 + 가이드
 ```
@@ -1095,14 +1109,28 @@ Tier 3: 복잡한 명령어 (수동)
 |------|------|---------------|---------------|------|
 | 소셜 | 30개+ | 104 | 104 | 달성 |
 | 도움말 | 50개+ | 721 | 2,220 | 달성 |
-| 스킬 목록 | 완성 | 54 | 79 | 달성 |
-| 커맨드 목록 | 완성 | 275 | 546 | 달성 |
+| 스킬 목록 | 완성 | 65 | 121 | 달성 |
+| 커맨드 목록 | 완성 | 301 | 550 | 달성 |
 | 종족 (해당 시) | 존재하면 | - | 5 | 달성 |
-| 테스트 | 전체 통과 | 113 tests pass | 113 tests pass | 달성 |
+| 테스트 | 전체 통과 | 144 tests pass | 144 tests pass | 달성 |
 
-### Phase 3 (완성) - 미착수
+### Phase 3 (시스템 테이블) - 완료
 
-- [ ] 전체 변환 성공률 80% 이상
+| 기준 | 목표 | 실제 (tbaMUD) | 실제 (Simoon) | 실제 (3eyes) | 상태 |
+|------|------|---------------|---------------|--------------|------|
+| 게임 설정 | 추출 | 54 | 36 | — | 달성 |
+| 경험치 테이블 | 추출 | 128 | 314 | 203 | 달성 |
+| THAC0 테이블 | 추출 | 140 | — | 160 | 달성 |
+| 세이빙 스로우 | 추출 | 870 | — | — | 달성 |
+| 레벨 칭호 | 추출 | 204 | 628 | — | 달성 |
+| 능력치 보정 | 추출 | 161 | 168 | 160 | 달성 |
+| 연습 파라미터 | 추출 | 4 | 7 | — | 달성 |
+| SQL 테이블 | +7 | 21 total | 21 total | 21 total | 달성 |
+| Lua 스크립트 | +3 | config+exp+stat | config+exp+stat | exp+stat | 달성 |
+| 테스트 | 전체 통과 | 191 tests pass | 191 tests pass | 191 tests pass | 달성 |
+
+### Phase 4 (폴리싱) - 미착수
+
 - [ ] 수동 작업 가이드 완성
 - [ ] 사용자 매뉴얼 완성
 
@@ -1137,6 +1165,6 @@ Tier 3: 복잡한 명령어 (수동)
 
 ---
 
-**문서 버전**: 1.2
-**최종 업데이트**: 2026-02-10 — Phase 2 완료 반영 (Socials, Help, Commands, Skills, Races)
+**문서 버전**: 1.3
+**최종 업데이트**: 2026-02-10 — Phase 3 완료 반영 (Game Config, Exp Table, THAC0, Saving Throws, Titles, Attr Mods, Practice Params)
 **피드백**: 마이그레이션 진행하면서 계속 개선

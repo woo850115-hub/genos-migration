@@ -47,9 +47,10 @@ Shops: 334
 Triggers: 1461
 Quests: 1
 Socials: 104
-Help: 721
-Commands: 275
-Skills: 54
+Help Entries: 721
+Skills: 65
+Commands: 301
+Races: 0
 Estimated Conversion: 100.0%
 ```
 
@@ -59,7 +60,7 @@ Estimated Conversion: 100.0%
 
 ### SQL Schema (schema.sql)
 
-14개 테이블이 생성됩니다:
+21개 테이블이 생성됩니다:
 
 | 테이블 | 설명 | 주요 JSONB 컬럼 | Phase |
 |--------|------|-----------------|-------|
@@ -76,6 +77,13 @@ Estimated Conversion: 100.0%
 | commands | 커맨드 목록 | - | 2 |
 | skills | 스킬/스펠 | class_levels, extensions | 2 |
 | races | 종족 | stat_modifiers, allowed_classes | 2 |
+| game_configs | 게임 설정 | - | 3 |
+| experience_table | 경험치 테이블 | - | 3 |
+| thac0_table | THAC0 테이블 | - | 3 |
+| saving_throws | 세이빙 스로우 | - | 3 |
+| level_titles | 레벨 칭호 | - | 3 |
+| attribute_modifiers | 능력치 보정 | modifiers (JSONB) | 3 |
+| practice_params | 연습 파라미터 | extensions (JSONB) | 3 |
 
 ### Seed Data (seed_data.sql)
 
@@ -101,6 +109,42 @@ Combat.roll_damage(dice_num, dice_size, bonus)
 
 -- 클래스/레벨별 THAC0 조회
 Combat.get_thac0(class_id, level)
+```
+
+### Lua: Game Config (config.lua) — Phase 3
+
+게임 설정을 카테고리별로 그룹핑합니다. `config.c`에서 추출한 ~54개 설정.
+
+```lua
+Config.game = {
+    script_players = false,
+    level_can_shout = 1,
+    tunnel_size = 2,
+    ...
+}
+Config.rent = { free_rent = true, ... }
+Config.room = { mortal_start_room = 3001, ... }
+```
+
+### Lua: Experience Tables (exp_tables.lua) — Phase 3
+
+클래스/레벨별 필요 경험치. `class.c`의 `level_exp()` 함수에서 추출.
+
+```lua
+ExpTables[0] = { [0] = 0, [1] = 1, [2] = 2500, ... }  -- Magic User
+ExpTables[3] = { [0] = 0, [1] = 1, [2] = 2000, ... }  -- Warrior
+
+function ExpTables.get_exp_required(class_id, level)
+```
+
+### Lua: Stat Tables (stat_tables.lua) — Phase 3
+
+THAC0, 세이빙 스로우, 능력치 보정 테이블. `class.c`, `constants.c`에서 추출.
+
+```lua
+StatTables.thac0[0] = { [1] = 20, [2] = 20, ... }  -- Magic User THAC0
+StatTables.saving_throws[0][0] = { [1] = 70, ... }  -- Magic User PARA
+StatTables.str_app[18] = { tohit = 1, todam = 2, carry_w = 220, wield_w = 10 }
 ```
 
 ### Lua: Triggers (triggers.lua)
@@ -146,7 +190,15 @@ python -m pytest tests/ -v
 | Socials | ~104 | 2 |
 | Help | ~721 | 2 |
 | Commands | ~275 | 2 |
-| Skills | ~54 | 2 |
+| Skills | ~65 | 2 |
+| Commands | ~301 | 2 |
+| Game Configs | ~54 | 3 |
+| Exp Table | ~128 | 3 |
+| THAC0 Table | ~140 | 3 |
+| Saving Throws | ~870 | 3 |
+| Level Titles | ~204 | 3 |
+| Attr Modifiers | ~161 | 3 |
+| Practice Params | ~4 | 3 |
 
 ### 3. 특정 엔티티 검증
 
@@ -219,4 +271,5 @@ genos -v migrate /path/to/mud
 3. **Spell/Skill 로직**: 스킬 메타데이터(이름, 마나, 타겟 등)는 마이그레이션 되지만, 실제 효과 로직은 재구현 필요
 4. **Player 데이터**: 플레이어 세이브 파일(.plr)은 마이그레이션 대상 아님
 5. **Binary 데이터**: 바이너리 세이브 파일은 지원하지 않음
-6. **C 소스 파싱 한계**: cmd_info[], spello() 추출은 정규식 기반이므로, 소스가 크게 수정된 MUD에서는 수동 조정 필요
+6. **C 소스 파싱 한계**: cmd_info[], spello(), config 변수, 경험치/THAC0/세이빙 스로우 추출은 모두 정규식 기반이므로, 소스가 크게 수정된 MUD에서는 수동 조정 필요
+7. **Phase 3 데이터 소스 의존**: config.c, class.c, constants.c 파일이 `src/` 디렉토리에 존재해야 Phase 3 데이터가 추출됨. 파일이 없으면 해당 항목은 빈 리스트로 처리

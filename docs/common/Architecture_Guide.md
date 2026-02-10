@@ -39,7 +39,7 @@ src/genos/
 │
 ├── uir/                     # Universal Intermediate Representation
 │   ├── __init__.py
-│   ├── schema.py            # 20+ 데이터클래스 정의
+│   ├── schema.py            # 25 데이터클래스 정의
 │   └── validator.py         # UIR 내부 일관성 검증
 │
 ├── adapters/                # 소스 MUD 어댑터
@@ -47,7 +47,7 @@ src/genos/
 │   ├── base.py              # BaseAdapter ABC + AnalysisReport
 │   ├── detector.py          # MUD 타입 자동 감지
 │   │
-│   ├── circlemud/           # CircleMUD/tbaMUD 어댑터 (11 파서)
+│   ├── circlemud/           # CircleMUD/tbaMUD 어댑터 (12 파서)
 │   │   ├── __init__.py
 │   │   ├── adapter.py       # CircleMudAdapter (통합 오케스트레이터)
 │   │   ├── constants.py     # 상수 매핑 + bitvector 변환
@@ -61,9 +61,10 @@ src/genos/
 │   │   ├── social_parser.py # Socials 파서 (Phase 2)
 │   │   ├── help_parser.py   # Help 파서 (Phase 2)
 │   │   ├── cmd_parser.py    # Commands 파서 — C 소스 (Phase 2)
-│   │   └── skill_parser.py  # Skills 파서 — C 소스 (Phase 2)
+│   │   ├── skill_parser.py  # Skills 파서 — C 소스 (Phase 2)
+│   │   └── config_parser.py # Game Config 파서 — C 소스 3파일 (Phase 3)
 │   │
-│   ├── simoon/              # Simoon 어댑터 (10 파서, 일부 circlemud 재사용)
+│   ├── simoon/              # Simoon 어댑터 (11 파서, 일부 circlemud 재사용)
 │   │   ├── __init__.py
 │   │   ├── adapter.py       # SimoonAdapter (EUC-KR + 확장 포맷)
 │   │   ├── wld_parser.py    # Simoon WLD (3필드)
@@ -72,9 +73,10 @@ src/genos/
 │   │   ├── zon_parser.py    # Simoon ZON (3필드 params)
 │   │   ├── qst_parser.py    # Simoon QST (4 tilde, 7+4 params)
 │   │   ├── help_parser.py   # Simoon Help — EUC-KR wrapper (Phase 2)
-│   │   └── cmd_parser.py    # Simoon Commands — EUC-KR + 5필드 (Phase 2)
+│   │   ├── cmd_parser.py    # Simoon Commands — EUC-KR + 5필드 (Phase 2)
+│   │   └── config_parser.py # Simoon Config — circlemud 재사용 + titles 파서 (Phase 3)
 │   │
-│   └── threeeyes/           # 3eyes 어댑터 (7 파서, 바이너리 C 구조체)
+│   └── threeeyes/           # 3eyes 어댑터 (8 파서, 바이너리 C 구조체)
 │       ├── __init__.py
 │       ├── adapter.py       # ThreeEyesAdapter (바이너리 파싱 오케스트레이터)
 │       ├── binary_utils.py  # struct 읽기, EUC-KR 문자열, 플래그 변환
@@ -83,13 +85,14 @@ src/genos/
 │       ├── mob_parser.py    # 1184-byte creature 바이너리 파서
 │       ├── room_parser.py   # 480-byte + 가변길이 room 바이너리 파서
 │       ├── help_parser.py   # EUC-KR 텍스트 도움말 파서
-│       └── talk_parser.py   # 몬스터 대화/설명 텍스트 파서
+│       ├── talk_parser.py   # 몬스터 대화/설명 텍스트 파서
+│       └── config_parser.py # 3eyes Config — global.c 배열 파싱 (Phase 3)
 │
 └── compiler/                # UIR → 타겟 변환
     ├── __init__.py
     ├── compiler.py          # GenosCompiler (출력 오케스트레이터)
-    ├── db_generator.py      # PostgreSQL DDL(14 테이블) + INSERT 생성
-    └── lua_generator.py     # Lua 스크립트 생성
+    ├── db_generator.py      # PostgreSQL DDL(21 테이블) + INSERT 생성
+    └── lua_generator.py     # Lua 스크립트 생성 (6종류)
 ```
 
 ---
@@ -129,12 +132,30 @@ CircleMudAdapter.parse()
   ├─ cmd_parser.parse_cmd_file()             →  list[Command]
   ├─ skill_parser.parse_skills()             →  list[Skill]
   │
+  │ Phase 3 — 게임 설정/시스템 테이블 (src/config.c, class.c, constants.c)
+  ├─ config_parser.parse_game_config()       →  list[GameConfig]           (54항목)
+  ├─ config_parser.parse_exp_table()         →  list[ExperienceEntry]      (128항목)
+  ├─ config_parser.parse_thac0_table()       →  list[ThacOEntry]           (140항목)
+  ├─ config_parser.parse_saving_throws()     →  list[SavingThrowEntry]     (870항목)
+  ├─ config_parser.parse_level_titles()      →  list[LevelTitle]           (204항목)
+  ├─ config_parser.parse_attribute_modifiers()→  list[AttributeModifier]   (161항목)
+  ├─ config_parser.parse_practice_params()   →  list[PracticeParams]       (4항목)
+  │
   └─ 조합 → UIR 객체
 
 SimoonAdapter.parse()
   │ (위와 동일 구조, EUC-KR 인코딩 + Simoon 포맷 차이)
   │ 추가: _default_races() → list[Race] (5종족 하드코딩)
   │ 추가: _simoon_classes() → list[CharacterClass] (7클래스)
+  │
+  │ Phase 3 — 게임 설정/시스템 테이블 (src/config.c, class.c, constants.c)
+  ├─ config_parser.parse_game_config()       →  list[GameConfig]           (36항목)
+  ├─ config_parser.parse_simoon_titles()     →  tuple[list[LevelTitle],    (628칭호)
+  │                                                  list[ExperienceEntry]] (314경험치)
+  ├─ config_parser.parse_attribute_modifiers()→  list[AttributeModifier]   (168항목)
+  ├─ config_parser.parse_practice_params()   →  list[PracticeParams]       (7항목)
+  ├─ config_parser.parse_train_params()      →  PracticeParams.extensions 머지
+  │
   └─ 조합 → UIR 객체
 
 ThreeEyesAdapter.parse()    ★ 바이너리 C 구조체 파싱
@@ -151,6 +172,13 @@ ThreeEyesAdapter.parse()    ★ 바이너리 C 구조체 파싱
   ├─ help_parser.parse_help_dir(help/)         →  list[HelpEntry]
   ├─ talk_parser.parse_talk_dir(objmon/talk/)  →  Monster.extensions 머지
   ├─ talk_parser.parse_ddesc_dir(objmon/ddesc/) → Monster.detailed_desc 머지
+  │
+  │ Phase 3 — 게임 설정/시스템 테이블 (src/global.c)
+  ├─ config_parser.parse_thac0_table()        →  list[ThacOEntry]          (160항목)
+  ├─ config_parser.parse_exp_table()          →  list[ExperienceEntry]     (203항목)
+  ├─ config_parser.parse_bonus_table()        →  list[AttributeModifier]   (160항목)
+  ├─ config_parser.parse_class_stats()        →  CharacterClass.extensions 머지
+  ├─ config_parser.parse_level_cycle()        →  uir.extensions["level_cycle"]
   │
   │ 하드코딩 데이터
   ├─ _threeeyes_classes()                      →  list[CharacterClass] (8클래스)
@@ -174,17 +202,22 @@ validator.validate_uir(uir)
 
 ```
 GenosCompiler.compile()
-  ├─ db_generator.generate_ddl()         →  sql/schema.sql (14 테이블)
-  ├─ db_generator.generate_seed_data()   →  sql/seed_data.sql
-  ├─ lua_generator.generate_combat_lua() →  lua/combat.lua
-  ├─ lua_generator.generate_class_lua()  →  lua/classes.lua
-  └─ lua_generator.generate_trigger_lua()→  lua/triggers.lua
+  ├─ db_generator.generate_ddl()              →  sql/schema.sql (21 테이블)
+  ├─ db_generator.generate_seed_data()        →  sql/seed_data.sql
+  ├─ lua_generator.generate_combat_lua()      →  lua/combat.lua
+  ├─ lua_generator.generate_class_lua()       →  lua/classes.lua
+  ├─ lua_generator.generate_trigger_lua()     →  lua/triggers.lua
+  ├─ lua_generator.generate_config_lua()      →  lua/config.lua      (Phase 3)
+  ├─ lua_generator.generate_exp_table_lua()   →  lua/exp_tables.lua  (Phase 3)
+  └─ lua_generator.generate_stat_tables_lua() →  lua/stat_tables.lua (Phase 3)
 ```
 
-**SQL 테이블 목록** (Phase 1 + Phase 2):
+**SQL 테이블 목록** (Phase 1 + Phase 2 + Phase 3):
 ```
-rooms, items, monsters, classes, zones, shops, triggers, quests,
-socials, help_entries, commands, skills, races
+Phase 1: rooms, items, monsters, classes, zones, shops, triggers, quests
+Phase 2: socials, help_entries, commands, skills, races
+Phase 3: game_configs, experience_table, thac0_table, saving_throws,
+         level_titles, attribute_modifiers, practice_params
 ```
 
 ---
@@ -205,6 +238,22 @@ Phase 1은 `lib/world/` 하위 데이터 파일만 파싱하지만, Phase 2는 �
 - **C 소스 코드**: `src/interpreter.c` (cmd_info[]), `src/spell_parser.c` (spello()), `src/class.c` (spell_level()), `src/spells.h` (#define)
 
 C 소스 파싱은 정규식 기반이며, 완전한 C 파서가 아닌 특정 패턴(배열 초기화, 함수 호출, #define)만 추출합니다. 이 접근은 표준 CircleMUD/tbaMUD 코드에서는 잘 동작하지만, 소스가 크게 수정된 경우 정규식 조정이 필요할 수 있습니다.
+
+### 1.6. Phase 3: 게임 설정/시스템 테이블
+
+Phase 3는 C 소스 코드에서 게임 밸런스/설정 데이터를 추출합니다:
+- **config.c**: 게임 설정 변수 (~40개, `int/bool/room_vnum` 타입)
+- **class.c**: 경험치 테이블, THAC0, 세이빙 스로우, 레벨 칭호, 연습 파라미터
+- **constants.c**: 능력치 보정 테이블 (str_app, dex_app, con_app 등 6종)
+- **global.c** (3eyes): thaco_list, level_exp, bonus, class_stats, level_cycle 배열
+
+핵심 설계 결정:
+- **GameConfig은 key-value 구조**: 설정이 이질적(int/bool/vnum/str)이므로 유연한 구조
+- **Flat entry 패턴**: ExperienceEntry 등은 SQL 행에 직접 매핑
+- **class_id=0 = 공유**: 3eyes/Simoon처럼 단일 테이블을 전 클래스가 공유하는 경우
+- **Simoon은 CircleMUD 파서 재사용**: encoding 파라미터만 `euc-kr`로 전달
+- **triple-nested switch 파싱**: saving_throws 함수의 class→save_type→level 3중 중첩 switch/case 파싱
+- **3eyes level_cycle은 extensions**: 다른 소스에 없는 고유 데이터는 `uir.extensions`에 저장
 
 ### 2. Bitvector → 비트 위치 리스트
 
@@ -279,13 +328,15 @@ class MyMudAdapter(BaseAdapter):
 
 | 어댑터 | 파서 수 | 파싱 방식 | 주요 파서 | 비고 |
 |--------|---------|-----------|-----------|------|
-| ThreeEyesAdapter | 7 | 바이너리 (struct.unpack) | obj/mob/room/help/talk | EUC-KR, 8클래스/8종족/63스펠 |
-| SimoonAdapter | 10 | 텍스트 (줄 단위) | wld/obj/mob/zon/qst + shp(공유) + help/cmd/skill | EUC-KR, 5종족/7클래스 |
-| CircleMudAdapter | 11 | 텍스트 (줄 단위) | wld/obj/mob/zon/trg/shp/qst + social/help/cmd/skill | tbaMUD 128-bit |
+| ThreeEyesAdapter | 8 | 바이너리 (struct.unpack) + C소스 | obj/mob/room/help/talk + config | EUC-KR, 8클래스/8종족/63스펠 |
+| SimoonAdapter | 11 | 텍스트 (줄 단위) + C소스 | wld/obj/mob/zon/qst + shp(공유) + help/cmd/skill + config | EUC-KR, 5종족/7클래스 |
+| CircleMudAdapter | 12 | 텍스트 (줄 단위) + C소스 | wld/obj/mob/zon/trg/shp/qst + social/help/cmd/skill + config | tbaMUD 128-bit |
 
 **감지 우선순위**: ThreeEyes > Simoon > CircleMud (구체적 → 일반적 순서).
-**공유 파서**: social_parser는 circlemud 패키지에 구현, Simoon이 encoding 파라미터만 다르게 호출.
+**공유 파서**: social_parser, config_parser(일부)는 circlemud 패키지에 구현, Simoon이 encoding 파라미터만 다르게 호출.
 **Simoon 래퍼**: help_parser, cmd_parser는 simoon/ 에 thin wrapper로 존재 (EUC-KR + 포맷 차이 대응).
+**Simoon config**: circlemud config_parser 재사용 + titles/train_params 고유 파서.
+**3eyes config**: global.c의 C 배열 이니셜라이저 직접 파싱 (thaco_list, level_exp, bonus, class_stats, level_cycle).
 **3eyes 특이점**: 텍스트 파일이 아닌 바이너리 C 구조체 — 다른 두 어댑터와 완전히 다른 파싱 전략 사용.
 
 ---
@@ -300,8 +351,8 @@ class MyMudAdapter(BaseAdapter):
 
 tbaMUD 출력 크기 (가장 큰 소스):
 - UIR YAML: ~878K lines, ~40MB
-- SQL seed: ~91K lines, ~16MB
-- Lua triggers: ~1.5MB
+- SQL seed: ~104K lines, ~17MB
+- Lua 6개: combat + classes + triggers + config + exp_tables + stat_tables (~1.5MB)
 
 ## 데이터 규모 비교
 
@@ -316,4 +367,12 @@ tbaMUD 출력 크기 (가장 큰 소스):
 | Triggers | 1,461 | — | — |
 | Classes | 14 | 7 | 8 |
 | Races | — | 5 | 8 |
-| Spells/Skills | 54 | 79 | 63 |
+| Spells/Skills | 65 | 121 | 63 |
+| **Phase 3** | | | |
+| Game Configs | 54 | 36 | — |
+| Exp Table | 128 | 314 | 203 |
+| THAC0 Table | 140 | — | 160 |
+| Saving Throws | 870 | — | — |
+| Level Titles | 204 | 628 | — |
+| Attr Modifiers | 161 | 168 | 160 |
+| Practice Params | 4 | 7 | — |

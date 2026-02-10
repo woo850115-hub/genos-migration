@@ -24,16 +24,21 @@
 | Races | 8 |
 | Talk Files | 41 |
 | Ddesc Files | 39 |
+| THAC0 Table | 160 |
+| Exp Table | 203 |
+| Attr Modifiers | 160 |
 
 ### 출력 파일
 
-| 파일 | 줄 수 |
-|------|-------|
-| uir.yaml | 422,832 |
-| seed_data.sql | 28,291 |
-| schema.sql | 170 |
-| combat.lua | (포함) |
-| classes.lua | (포함) |
+| 파일 | 크기 | 줄 수 |
+|------|------|-------|
+| uir.yaml | ~8 MB | ~423K |
+| seed_data.sql | 5.7 MB | 28,820 |
+| schema.sql | 8 KB | 224 |
+| combat.lua | 1.6 KB | 56 |
+| classes.lua | 2.1 KB | 103 |
+| exp_tables.lua | 4.3 KB | 218 |
+| stat_tables.lua | 4.9 KB | 180 |
 
 ---
 
@@ -503,3 +508,82 @@ VNUM 0, 4, 5, 6, 7, 8, 9, 10 등 13개 방에 이름이 없다. 시스템 예약
 #녹{검제3의 }#빨{검눈}으로 오신것을 환영합니다.
 ```
 GenOS 변환 시 이 색상 코드의 후처리 매핑이 필요하다.
+
+---
+
+## 14. Phase 3: 시스템 테이블 마이그레이션
+
+3eyes의 시스템 데이터는 `src/global.c`의 C 배열 이니셜라이저에서 파싱한다. tbaMUD/Simoon의 `config.c`/`class.c`/`constants.c` 구조와 다르지만, 동일한 UIR 구조로 변환된다.
+
+### 14-1. THAC0 Table
+
+`thaco_list[][20]` 배열에서 추출. **160개** 항목 (8클래스 × 20레벨).
+
+```c
+short thaco_list[][20] = {
+    { 20, 20, 19, 19, 18, ... },  // Assassin (class 1)
+    { 20, 19, 18, 17, 16, ... },  // Barbarian (class 2)
+    ...
+};
+```
+
+클래스 1(Assassin)~8(Thief)까지 각각 레벨 1~20의 THAC0 값. tbaMUD(34레벨)보다 레벨 범위가 좁지만 클래스 수가 2배(8개 vs 4개).
+
+### 14-2. Experience Table
+
+`level_exp[]` 배열에서 추출. **203개** 항목 (레벨 0~202, class_id=0 공유).
+
+```c
+long level_exp[] = { 0, 100, 300, 700, 1500, ... };
+```
+
+전 클래스가 동일 경험치 테이블을 공유한다 (tbaMUD와 달리 클래스별 분리 없음). 최대 레벨 127에 비해 테이블은 202까지 정의되어 있어 여유분이 존재.
+
+### 14-3. Bonus Table (능력치 보정)
+
+`bonus[]` 배열에서 추출. **160개** 항목 → `AttributeModifier(stat_name="bonus")`.
+
+```c
+short bonus[] = { -5, -5, -4, -4, -3, ..., 3, 4, 5 };
+```
+
+tbaMUD의 6종 세분화된 능력치 보정(str_app, dex_app 등)과 달리, 3eyes는 단일 `bonus[]` 배열로 모든 능력치 보정을 처리한다.
+
+### 14-4. Class Stats
+
+`class_stats[13]` 배열에서 추출. 8개 클래스의 초기 스탯 및 레벨업 주사위.
+
+```c
+struct class_stats_struct class_stats[] = {
+    { hpstart, mpstart, hp, mp, ndice, sdice, pdice },
+    ...
+};
+```
+
+추출된 데이터는 `CharacterClass.extensions`에 머지:
+- `hpstart`/`mpstart`: 시작 HP/MP
+- `hp`/`mp`: 레벨업 HP/MP 기본 증가
+- `ndice`/`sdice`/`pdice`: 레벨업 주사위 (NdS+P)
+
+### 14-5. Level Cycle
+
+`level_cycle[][10]` 배열에서 추출. `uir.extensions["level_cycle"]`에 저장.
+
+3eyes 고유의 레벨업 스탯 사이클 시스템으로, 각 레벨업 시 어떤 능력치가 상승하는지 정의한다. STR/INT/DEX/CON/PTY(경건) 5개 능력치의 순환 패턴.
+
+### 14-6. 미지원 항목
+
+- **Game Config**: 3eyes에는 `config.c`가 없음 (설정이 하드코딩)
+- **Saving Throws**: global.c에 세이빙 스로우 테이블 없음
+- **Level Titles**: 3eyes 칭호는 커스텀 시스템 (C 배열에 없음)
+- **Practice Params**: global.c에 연습 파라미터 없음
+
+### 14-7. Phase 3 출력 파일 변화
+
+| 파일 | Phase 2 | Phase 3 적용 후 |
+|------|---------|-----------------|
+| schema.sql | 14 테이블 | 21 테이블 (+7) |
+| seed_data.sql | ~28K 줄 | ~29K 줄 (+523 Phase 3 행) |
+| Lua 스크립트 | 2개 | 4개 (+exp_tables, stat_tables) |
+
+3eyes는 config.c가 없어 config.lua가 생성되지 않는다 (tbaMUD/Simoon과의 차이).

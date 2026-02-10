@@ -17,6 +17,15 @@ from genos.uir.schema import (
 )
 
 from .cmd_parser import parse_cmd_file
+from .config_parser import (
+    parse_attribute_modifiers,
+    parse_exp_table,
+    parse_game_config,
+    parse_level_titles,
+    parse_practice_params,
+    parse_saving_throws,
+    parse_thac0_table,
+)
 from .help_parser import parse_help_dir
 from .mob_parser import parse_mob_file
 from .obj_parser import parse_obj_file
@@ -111,6 +120,15 @@ class CircleMudAdapter(BaseAdapter):
         uir.commands = self._parse_commands(stats)
         uir.skills = self._parse_skills(stats)
 
+        # Phase 3: game system config
+        uir.game_configs = self._parse_game_config(stats)
+        uir.experience_table = self._parse_exp_table(stats)
+        uir.thac0_table = self._parse_thac0_table(stats)
+        uir.saving_throws = self._parse_saving_throws(stats)
+        uir.level_titles = self._parse_level_titles(stats)
+        uir.attribute_modifiers = self._parse_attribute_modifiers(stats)
+        uir.practice_params = self._parse_practice_params(stats)
+
         # Set stats
         stats.total_rooms = len(uir.rooms)
         stats.total_items = len(uir.items)
@@ -123,6 +141,12 @@ class CircleMudAdapter(BaseAdapter):
         stats.total_help_entries = len(uir.help_entries)
         stats.total_commands = len(uir.commands)
         stats.total_skills = len(uir.skills)
+        stats.total_game_configs = len(uir.game_configs)
+        stats.total_exp_entries = len(uir.experience_table)
+        stats.total_thac0_entries = len(uir.thac0_table)
+        stats.total_saving_throw_entries = len(uir.saving_throws)
+        stats.total_level_titles = len(uir.level_titles)
+        stats.total_attribute_modifiers = len(uir.attribute_modifiers)
         uir.migration_stats = stats
 
         # Add standard CircleMUD classes
@@ -264,6 +288,92 @@ class CircleMudAdapter(BaseAdapter):
             return parse_skills(src_dir, has_spell_name=True)
         except Exception as e:
             msg = f"Error parsing skills: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    # ── Phase 3 parsing ───────────────────────────────────────────────
+
+    def _parse_game_config(self, stats):
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_game_config(src_dir)
+        except Exception as e:
+            msg = f"Error parsing game config: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    def _parse_exp_table(self, stats):
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_exp_table(src_dir)
+        except Exception as e:
+            msg = f"Error parsing exp table: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    def _parse_thac0_table(self, stats):
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_thac0_table(src_dir)
+        except Exception as e:
+            msg = f"Error parsing thac0 table: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    def _parse_saving_throws(self, stats):
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_saving_throws(src_dir)
+        except Exception as e:
+            msg = f"Error parsing saving throws: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    def _parse_level_titles(self, stats):
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_level_titles(src_dir)
+        except Exception as e:
+            msg = f"Error parsing level titles: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    def _parse_attribute_modifiers(self, stats):
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_attribute_modifiers(src_dir)
+        except Exception as e:
+            msg = f"Error parsing attribute modifiers: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    def _parse_practice_params(self, stats):
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_practice_params(src_dir)
+        except Exception as e:
+            msg = f"Error parsing practice params: {e}"
             logger.warning(msg)
             stats.warnings.append(msg)
             return []

@@ -180,6 +180,60 @@ CREATE TABLE IF NOT EXISTS races (
     extensions      JSONB NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS game_configs (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL DEFAULT '',
+    value_type  TEXT NOT NULL DEFAULT 'int',
+    category    TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS experience_table (
+    class_id     INTEGER NOT NULL DEFAULT 0,
+    level        INTEGER NOT NULL,
+    exp_required BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (class_id, level)
+);
+
+CREATE TABLE IF NOT EXISTS thac0_table (
+    class_id INTEGER NOT NULL DEFAULT 0,
+    level    INTEGER NOT NULL,
+    thac0    INTEGER NOT NULL DEFAULT 20,
+    PRIMARY KEY (class_id, level)
+);
+
+CREATE TABLE IF NOT EXISTS saving_throws (
+    class_id   INTEGER NOT NULL DEFAULT 0,
+    save_type  INTEGER NOT NULL DEFAULT 0,
+    level      INTEGER NOT NULL,
+    save_value INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (class_id, save_type, level)
+);
+
+CREATE TABLE IF NOT EXISTS level_titles (
+    class_id INTEGER NOT NULL DEFAULT 0,
+    level    INTEGER NOT NULL,
+    gender   TEXT NOT NULL DEFAULT 'male',
+    title    TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (class_id, level, gender)
+);
+
+CREATE TABLE IF NOT EXISTS attribute_modifiers (
+    stat_name TEXT NOT NULL,
+    score     INTEGER NOT NULL,
+    modifiers JSONB NOT NULL DEFAULT '{}',
+    PRIMARY KEY (stat_name, score)
+);
+
+CREATE TABLE IF NOT EXISTS practice_params (
+    class_id         INTEGER PRIMARY KEY,
+    learned_level    INTEGER NOT NULL DEFAULT 0,
+    max_per_practice INTEGER NOT NULL DEFAULT 0,
+    min_per_practice INTEGER NOT NULL DEFAULT 0,
+    prac_type        TEXT NOT NULL DEFAULT 'skill',
+    extensions       JSONB NOT NULL DEFAULT '{}'
+);
+
 """)
 
     out.write("COMMIT;\n")
@@ -402,6 +456,75 @@ def generate_seed_data(uir: UIR, out: TextIO) -> None:
             f"{_sql_str(json.dumps(race.stat_modifiers))}, "
             f"{_sql_str(json.dumps(race.allowed_classes))}, "
             f"{_sql_str(json.dumps(race.extensions))});\n"
+        )
+
+    # Game configs
+    for gc in uir.game_configs:
+        out.write(
+            f"INSERT INTO game_configs (key, value, value_type, category, description) "
+            f"VALUES ({_sql_str(gc.key)}, {_sql_str(gc.value)}, "
+            f"{_sql_str(gc.value_type)}, {_sql_str(gc.category)}, "
+            f"{_sql_str(gc.description)});\n"
+        )
+
+    out.write("\n")
+
+    # Experience table
+    for exp in uir.experience_table:
+        out.write(
+            f"INSERT INTO experience_table (class_id, level, exp_required) "
+            f"VALUES ({exp.class_id}, {exp.level}, {exp.exp_required});\n"
+        )
+
+    out.write("\n")
+
+    # THAC0 table
+    for th in uir.thac0_table:
+        out.write(
+            f"INSERT INTO thac0_table (class_id, level, thac0) "
+            f"VALUES ({th.class_id}, {th.level}, {th.thac0});\n"
+        )
+
+    out.write("\n")
+
+    # Saving throws
+    for st in uir.saving_throws:
+        out.write(
+            f"INSERT INTO saving_throws (class_id, save_type, level, save_value) "
+            f"VALUES ({st.class_id}, {st.save_type}, {st.level}, {st.save_value});\n"
+        )
+
+    out.write("\n")
+
+    # Level titles
+    for lt in uir.level_titles:
+        out.write(
+            f"INSERT INTO level_titles (class_id, level, gender, title) "
+            f"VALUES ({lt.class_id}, {lt.level}, {_sql_str(lt.gender)}, "
+            f"{_sql_str(lt.title)});\n"
+        )
+
+    out.write("\n")
+
+    # Attribute modifiers
+    for am in uir.attribute_modifiers:
+        out.write(
+            f"INSERT INTO attribute_modifiers (stat_name, score, modifiers) "
+            f"VALUES ({_sql_str(am.stat_name)}, {am.score}, "
+            f"{_sql_str(json.dumps(am.modifiers))});\n"
+        )
+
+    out.write("\n")
+
+    # Practice params
+    for pp in uir.practice_params:
+        out.write(
+            f"INSERT INTO practice_params (class_id, learned_level, "
+            f"max_per_practice, min_per_practice, prac_type, extensions) "
+            f"VALUES ({pp.class_id}, {pp.learned_level}, "
+            f"{pp.max_per_practice}, {pp.min_per_practice}, "
+            f"{_sql_str(pp.prac_type)}, "
+            f"{_sql_str(json.dumps(pp.extensions))});\n"
         )
 
     out.write("\nCOMMIT;\n")

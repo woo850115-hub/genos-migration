@@ -33,6 +33,13 @@ from genos.uir.schema import (
     UIR,
 )
 
+from .config_parser import (
+    parse_bonus_table,
+    parse_class_stats,
+    parse_exp_table,
+    parse_level_cycle,
+    parse_thac0_table,
+)
 from .constants import CLASSES, RACES, SIZEOF_CREATURE, SIZEOF_OBJECT, RECORDS_PER_FILE, SPELL_NAMES
 from .help_parser import parse_all_help
 from .mob_parser import parse_all_monsters
@@ -162,6 +169,22 @@ class ThreeEyesAdapter(BaseAdapter):
         uir.races = _threeeyes_races()
         uir.skills = _threeeyes_spells()
 
+        # Phase 3: game system config from global.c
+        uir.thac0_table = self._parse_thac0_table(stats)
+        uir.experience_table = self._parse_exp_table(stats)
+        uir.attribute_modifiers = self._parse_bonus_table(stats)
+
+        # Merge class_stats into character_classes extensions
+        class_stats = self._parse_class_stats(stats)
+        for cls in uir.character_classes:
+            if cls.id in class_stats:
+                cls.extensions.update(class_stats[cls.id])
+
+        # level_cycle → extensions
+        level_cycle = self._parse_level_cycle(stats)
+        if level_cycle:
+            uir.extensions["level_cycle"] = level_cycle
+
         # Stats
         stats.total_rooms = len(uir.rooms)
         stats.total_items = len(uir.items)
@@ -170,6 +193,9 @@ class ThreeEyesAdapter(BaseAdapter):
         stats.total_help_entries = len(uir.help_entries)
         stats.total_skills = len(uir.skills)
         stats.total_races = len(uir.races)
+        stats.total_thac0_entries = len(uir.thac0_table)
+        stats.total_exp_entries = len(uir.experience_table)
+        stats.total_attribute_modifiers = len(uir.attribute_modifiers)
         uir.migration_stats = stats
 
         uir.combat_system = CombatSystem(
@@ -228,6 +254,66 @@ class ThreeEyesAdapter(BaseAdapter):
             logger.warning(msg)
             stats.warnings.append(msg)
             return []
+
+    def _parse_thac0_table(self, stats: MigrationStats) -> list:
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_thac0_table(src_dir)
+        except Exception as e:
+            msg = f"Error parsing thac0 table: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    def _parse_exp_table(self, stats: MigrationStats) -> list:
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_exp_table(src_dir)
+        except Exception as e:
+            msg = f"Error parsing exp table: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    def _parse_bonus_table(self, stats: MigrationStats) -> list:
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_bonus_table(src_dir)
+        except Exception as e:
+            msg = f"Error parsing bonus table: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    def _parse_class_stats(self, stats: MigrationStats) -> dict:
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return {}
+        try:
+            return parse_class_stats(src_dir)
+        except Exception as e:
+            msg = f"Error parsing class stats: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return {}
+
+    def _parse_level_cycle(self, stats: MigrationStats) -> dict:
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return {}
+        try:
+            return parse_level_cycle(src_dir)
+        except Exception as e:
+            msg = f"Error parsing level cycle: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return {}
 
     def _merge_talk_files(self, monsters: list[Monster]) -> None:
         """Merge talk and ddesc files into parsed monsters."""

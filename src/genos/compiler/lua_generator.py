@@ -239,6 +239,119 @@ def _convert_dg_condition(condition: str) -> str:
     return result
 
 
+def generate_config_lua(uir: UIR, out: TextIO) -> None:
+    """Generate game configuration Lua script."""
+    out.write("-- GenOS Game Configuration\n")
+    out.write("-- Auto-generated from UIR\n\n")
+    out.write("local Config = {}\n\n")
+
+    # Group by category
+    categories: dict[str, list] = {}
+    for gc in uir.game_configs:
+        cat = gc.category or "general"
+        if cat not in categories:
+            categories[cat] = []
+        categories[cat].append(gc)
+
+    for cat, configs in sorted(categories.items()):
+        out.write(f"Config.{cat} = {{\n")
+        for gc in configs:
+            if gc.value_type == "bool":
+                lua_val = "true" if gc.value in ("1", "true", "YES") else "false"
+            elif gc.value_type in ("int", "room_vnum"):
+                lua_val = gc.value
+            else:
+                lua_val = _lua_str(gc.value)
+            out.write(f"    {gc.key} = {lua_val},\n")
+        out.write("}\n\n")
+
+    out.write("return Config\n")
+
+
+def generate_exp_table_lua(uir: UIR, out: TextIO) -> None:
+    """Generate experience table Lua script."""
+    out.write("-- GenOS Experience Tables\n")
+    out.write("-- Auto-generated from UIR\n\n")
+    out.write("local ExpTables = {}\n\n")
+
+    # Group by class_id
+    by_class: dict[int, list] = {}
+    for exp in uir.experience_table:
+        if exp.class_id not in by_class:
+            by_class[exp.class_id] = []
+        by_class[exp.class_id].append(exp)
+
+    for class_id in sorted(by_class):
+        out.write(f"ExpTables[{class_id}] = {{\n")
+        for exp in sorted(by_class[class_id], key=lambda e: e.level):
+            out.write(f"    [{exp.level}] = {exp.exp_required},\n")
+        out.write("}\n\n")
+
+    out.write("""\
+function ExpTables.get_exp_required(class_id, level)
+    local tbl = ExpTables[class_id] or ExpTables[0]
+    if not tbl then return 0 end
+    return tbl[level] or 0
+end
+
+""")
+    out.write("return ExpTables\n")
+
+
+def generate_stat_tables_lua(uir: UIR, out: TextIO) -> None:
+    """Generate stat modifier tables Lua script."""
+    out.write("-- GenOS Stat Tables\n")
+    out.write("-- Auto-generated from UIR\n\n")
+    out.write("local StatTables = {}\n\n")
+
+    # THAC0 table
+    if uir.thac0_table:
+        out.write("StatTables.thac0 = {\n")
+        by_class: dict[int, list] = {}
+        for th in uir.thac0_table:
+            if th.class_id not in by_class:
+                by_class[th.class_id] = []
+            by_class[th.class_id].append(th)
+        for class_id in sorted(by_class):
+            out.write(f"    [{class_id}] = {{")
+            for th in sorted(by_class[class_id], key=lambda t: t.level):
+                out.write(f"[{th.level}]={th.thac0},")
+            out.write("},\n")
+        out.write("}\n\n")
+
+    # Saving throws
+    if uir.saving_throws:
+        out.write("StatTables.saving_throws = {\n")
+        by_class_save: dict[tuple[int, int], list] = {}
+        for st in uir.saving_throws:
+            key = (st.class_id, st.save_type)
+            if key not in by_class_save:
+                by_class_save[key] = []
+            by_class_save[key].append(st)
+        for (class_id, save_type) in sorted(by_class_save):
+            out.write(f"    ['{class_id}_{save_type}'] = {{")
+            for st in sorted(by_class_save[(class_id, save_type)], key=lambda s: s.level):
+                out.write(f"[{st.level}]={st.save_value},")
+            out.write("},\n")
+        out.write("}\n\n")
+
+    # Attribute modifiers
+    if uir.attribute_modifiers:
+        by_stat: dict[str, list] = {}
+        for am in uir.attribute_modifiers:
+            if am.stat_name not in by_stat:
+                by_stat[am.stat_name] = []
+            by_stat[am.stat_name].append(am)
+        for stat_name in sorted(by_stat):
+            out.write(f"StatTables.{stat_name} = {{\n")
+            for am in sorted(by_stat[stat_name], key=lambda a: a.score):
+                mods = ", ".join(f'{k}={v}' for k, v in am.modifiers.items())
+                out.write(f"    [{am.score}] = {{{mods}}},\n")
+            out.write("}\n\n")
+
+    out.write("return StatTables\n")
+
+
 def _lua_str(s: str) -> str:
     """Escape a string for Lua."""
     escaped = s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")

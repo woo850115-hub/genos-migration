@@ -34,6 +34,12 @@ class MigrationStats:
     total_skills: int = 0
     total_commands: int = 0
     total_races: int = 0
+    total_game_configs: int = 0
+    total_exp_entries: int = 0
+    total_thac0_entries: int = 0
+    total_saving_throw_entries: int = 0
+    total_level_titles: int = 0
+    total_attribute_modifiers: int = 0
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -339,6 +345,64 @@ class Race:
     extensions: dict[str, Any] = field(default_factory=dict)
 
 
+# ── Game Config / System Tables ───────────────────────────────────────
+
+@dataclass
+class GameConfig:
+    key: str = ""
+    value: str = ""
+    value_type: str = "int"  # int/bool/str/room_vnum
+    category: str = ""  # pk/economy/corpse/idle/rent/room/game/port
+    description: str = ""
+
+
+@dataclass
+class ExperienceEntry:
+    class_id: int = 0  # 0 = shared across all classes
+    level: int = 0
+    exp_required: int = 0
+
+
+@dataclass
+class ThacOEntry:
+    class_id: int = 0
+    level: int = 0
+    thac0: int = 20
+
+
+@dataclass
+class SavingThrowEntry:
+    class_id: int = 0
+    save_type: int = 0  # 0=PARA,1=ROD,2=PETRI,3=BREATH,4=SPELL
+    level: int = 0
+    save_value: int = 0
+
+
+@dataclass
+class LevelTitle:
+    class_id: int = 0  # 0 = shared across all classes
+    level: int = 0
+    gender: str = "male"  # male/female/neutral
+    title: str = ""
+
+
+@dataclass
+class AttributeModifier:
+    stat_name: str = ""  # strength/dexterity/constitution/intelligence/wisdom/dex_skill/bonus
+    score: int = 0
+    modifiers: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
+class PracticeParams:
+    class_id: int = 0
+    learned_level: int = 0
+    max_per_practice: int = 0
+    min_per_practice: int = 0
+    prac_type: str = "skill"
+    extensions: dict[str, Any] = field(default_factory=dict)
+
+
 # ── Top-level UIR ───────────────────────────────────────────────────────
 
 @dataclass
@@ -361,4 +425,11 @@ class UIR:
     help_entries: list[HelpEntry] = field(default_factory=list)
     skills: list[Skill] = field(default_factory=list)
     races: list[Race] = field(default_factory=list)
+    game_configs: list[GameConfig] = field(default_factory=list)
+    experience_table: list[ExperienceEntry] = field(default_factory=list)
+    thac0_table: list[ThacOEntry] = field(default_factory=list)
+    saving_throws: list[SavingThrowEntry] = field(default_factory=list)
+    level_titles: list[LevelTitle] = field(default_factory=list)
+    attribute_modifiers: list[AttributeModifier] = field(default_factory=list)
+    practice_params: list[PracticeParams] = field(default_factory=list)
     extensions: dict[str, Any] = field(default_factory=dict)

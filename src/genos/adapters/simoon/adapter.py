@@ -20,6 +20,13 @@ from genos.uir.schema import (
 )
 
 from .cmd_parser import parse_cmd_file
+from .config_parser import (
+    parse_attribute_modifiers,
+    parse_game_config,
+    parse_practice_params,
+    parse_simoon_titles,
+    parse_train_params,
+)
 from .help_parser import parse_help_dir
 from .mob_parser import parse_mob_file
 from .obj_parser import parse_obj_file
@@ -114,6 +121,21 @@ class SimoonAdapter(BaseAdapter):
         uir.skills = self._parse_skills(stats)
         uir.races = _default_races()
 
+        # Phase 3: game system config
+        uir.game_configs = self._parse_game_config(stats)
+        uir.attribute_modifiers = self._parse_attribute_modifiers(stats)
+        uir.practice_params = self._parse_practice_params(stats)
+        titles, exp_entries = self._parse_titles_and_exp(stats)
+        uir.level_titles = titles
+        uir.experience_table = exp_entries
+        # Merge train_params into practice_params extensions
+        train = self._parse_train_params(stats)
+        for tp in train:
+            for pp in uir.practice_params:
+                if pp.class_id == tp.class_id:
+                    pp.extensions.update(tp.extensions)
+                    break
+
         stats.total_rooms = len(uir.rooms)
         stats.total_items = len(uir.items)
         stats.total_monsters = len(uir.monsters)
@@ -126,6 +148,10 @@ class SimoonAdapter(BaseAdapter):
         stats.total_commands = len(uir.commands)
         stats.total_skills = len(uir.skills)
         stats.total_races = len(uir.races)
+        stats.total_game_configs = len(uir.game_configs)
+        stats.total_exp_entries = len(uir.experience_table)
+        stats.total_level_titles = len(uir.level_titles)
+        stats.total_attribute_modifiers = len(uir.attribute_modifiers)
         uir.migration_stats = stats
 
         uir.character_classes = _simoon_classes()
@@ -265,6 +291,68 @@ class SimoonAdapter(BaseAdapter):
             )
         except Exception as e:
             msg = f"Error parsing skills: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    # ── Phase 3 parsing ───────────────────────────────────────────────
+
+    def _parse_game_config(self, stats):
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_game_config(src_dir)
+        except Exception as e:
+            msg = f"Error parsing game config: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    def _parse_attribute_modifiers(self, stats):
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_attribute_modifiers(src_dir)
+        except Exception as e:
+            msg = f"Error parsing attribute modifiers: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    def _parse_practice_params(self, stats):
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_practice_params(src_dir)
+        except Exception as e:
+            msg = f"Error parsing practice params: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return []
+
+    def _parse_titles_and_exp(self, stats):
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return [], []
+        try:
+            return parse_simoon_titles(src_dir)
+        except Exception as e:
+            msg = f"Error parsing titles/exp: {e}"
+            logger.warning(msg)
+            stats.warnings.append(msg)
+            return [], []
+
+    def _parse_train_params(self, stats):
+        src_dir = self.source_path / "src"
+        if not src_dir.is_dir():
+            return []
+        try:
+            return parse_train_params(src_dir)
+        except Exception as e:
+            msg = f"Error parsing train params: {e}"
             logger.warning(msg)
             stats.warnings.append(msg)
             return []

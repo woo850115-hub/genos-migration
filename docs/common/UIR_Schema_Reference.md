@@ -1,6 +1,6 @@
 # UIR (Universal Intermediate Representation) 스키마 참조
 
-**Version**: 2.0
+**Version**: 3.0
 **정의 파일**: `src/genos/uir/schema.py`
 **JSON Schema**: `schema/uir.schema.json`
 
@@ -44,6 +44,13 @@ class UIR:
     help_entries: list[HelpEntry]              # 도움말 (Phase 2)
     skills: list[Skill]                        # 스킬/스펠 메타데이터 (Phase 2)
     races: list[Race]                          # 종족 (Phase 2)
+    game_configs: list[GameConfig]             # 게임 설정 (Phase 3)
+    experience_table: list[ExperienceEntry]    # 경험치 테이블 (Phase 3)
+    thac0_table: list[ThacOEntry]              # THAC0 테이블 (Phase 3)
+    saving_throws: list[SavingThrowEntry]      # 세이빙 스로우 (Phase 3)
+    level_titles: list[LevelTitle]             # 레벨 칭호 (Phase 3)
+    attribute_modifiers: list[AttributeModifier] # 능력치 보정 (Phase 3)
+    practice_params: list[PracticeParams]      # 연습 파라미터 (Phase 3)
     extensions: dict[str, Any]                 # 소스별 확장 데이터
 ```
 
@@ -332,6 +339,122 @@ class Command:
     category: str = ""           # 분류 ("movement", "combat", "info" 등)
 ```
 
+### GameConfig (Phase 3)
+
+게임 설정 key-value 항목. `config.c`에서 추출.
+
+```python
+@dataclass
+class GameConfig:
+    key: str = ""                  # 설정 변수명 ("pk_setting", "free_rent")
+    value: str = ""                # 값 (문자열로 저장)
+    value_type: str = "int"        # int/bool/str/room_vnum
+    category: str = ""             # pk/economy/corpse/idle/rent/room/game/port
+    description: str = ""          # 설명
+```
+
+**category별 분류**: 게임 설정이 8개 카테고리로 분류됩니다.
+- `pk`: PK/PT 설정
+- `economy`: 경험치 상한/하한
+- `corpse`: 시체 소멸 시간
+- `idle`: 유휴 상태 처리
+- `rent`: 장비 보관 설정
+- `room`: 시작방/기부방 VNUM
+- `game`: 일반 게임 설정 (40+ 항목)
+- `port`: 포트/최대 접속자
+
+### ExperienceEntry (Phase 3)
+
+클래스/레벨별 필요 경험치.
+
+```python
+@dataclass
+class ExperienceEntry:
+    class_id: int = 0              # 0 = 전 클래스 공유 (3eyes/Simoon)
+    level: int = 0
+    exp_required: int = 0          # 해당 레벨 도달에 필요한 누적 경험치
+```
+
+**class_id=0**: 3eyes, Simoon처럼 전 클래스가 동일 테이블을 공유하는 경우.
+tbaMUD는 class_id 0~3 (Magic User/Cleric/Thief/Warrior) 각각 별도 테이블.
+
+### ThacOEntry (Phase 3)
+
+클래스/레벨별 THAC0 (To Hit Armor Class 0) 값.
+
+```python
+@dataclass
+class ThacOEntry:
+    class_id: int = 0
+    level: int = 0
+    thac0: int = 20                # 낮을수록 명중률 높음
+```
+
+### SavingThrowEntry (Phase 3)
+
+클래스/세이브타입/레벨별 세이빙 스로우 수치.
+
+```python
+@dataclass
+class SavingThrowEntry:
+    class_id: int = 0
+    save_type: int = 0             # 0=PARA, 1=ROD, 2=PETRI, 3=BREATH, 4=SPELL
+    level: int = 0
+    save_value: int = 0            # 낮을수록 좋음
+```
+
+**save_type 매핑**:
+- 0 = Paralyzation, 1 = Rod/Staff/Wand, 2 = Petrification, 3 = Breath Weapon, 4 = Spell
+
+### LevelTitle (Phase 3)
+
+레벨/성별별 칭호 문자열.
+
+```python
+@dataclass
+class LevelTitle:
+    class_id: int = 0              # 0 = 전 클래스 공유
+    level: int = 0
+    gender: str = "male"           # male/female/neutral
+    title: str = ""                # "the Sorcerer", "마도사" 등
+```
+
+### AttributeModifier (Phase 3)
+
+능력치 점수별 게임 보정치.
+
+```python
+@dataclass
+class AttributeModifier:
+    stat_name: str = ""            # strength/dexterity/constitution/intelligence/wisdom/dex_skill/bonus
+    score: int = 0                 # 능력치 점수
+    modifiers: dict[str, int] = field(default_factory=dict)  # {"tohit": 1, "todam": 2, ...}
+```
+
+**stat_name별 modifier 키**:
+- `strength`: tohit, todam, carry_w, wield_w
+- `dexterity`: reaction, missile_attack, defensive
+- `dex_skill`: p_pocket, p_locks, p_traps, p_sneak, p_hide
+- `constitution`: hitp, shock
+- `intelligence`: learn
+- `wisdom`: bonus
+- `bonus` (3eyes): 단일 int 값을 `{"value": N}`으로 저장
+
+### PracticeParams (Phase 3)
+
+클래스별 연습/훈련 파라미터.
+
+```python
+@dataclass
+class PracticeParams:
+    class_id: int = 0
+    learned_level: int = 0         # 연습으로 도달 가능한 최대 %
+    max_per_practice: int = 0      # 1회 연습당 최대 증가량
+    min_per_practice: int = 0      # 1회 연습당 최소 증가량
+    prac_type: str = "skill"       # skill/spell
+    extensions: dict[str, Any] = field(default_factory=dict)  # Simoon train_params 등
+```
+
 ### CombatSystem
 
 전투 시스템 파라미터.
@@ -375,11 +498,17 @@ class MigrationStats:
     total_shops: int = 0
     total_triggers: int = 0
     total_quests: int = 0
-    total_socials: int = 0          # Phase 2
-    total_help_entries: int = 0     # Phase 2
-    total_skills: int = 0           # Phase 2
-    total_commands: int = 0         # Phase 2
-    total_races: int = 0            # Phase 2
+    total_socials: int = 0                  # Phase 2
+    total_help_entries: int = 0             # Phase 2
+    total_skills: int = 0                   # Phase 2
+    total_commands: int = 0                 # Phase 2
+    total_races: int = 0                    # Phase 2
+    total_game_configs: int = 0             # Phase 3
+    total_exp_entries: int = 0              # Phase 3
+    total_thac0_entries: int = 0            # Phase 3
+    total_saving_throw_entries: int = 0     # Phase 3
+    total_level_titles: int = 0             # Phase 3
+    total_attribute_modifiers: int = 0      # Phase 3
     parse_errors: int = 0
     parse_warnings: int = 0
 ```

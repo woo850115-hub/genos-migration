@@ -23,19 +23,27 @@ Simoon(시간의문)은 CircleMUD 3.0 기반 한국 커스텀 MUD이다. 원래 
 | Classes | 7 | 1+2 |
 | Socials | 104 | 2 |
 | Help | 2,220 | 2 |
-| Commands | 546 | 2 |
-| Skills | 79 | 2 |
+| Commands | 550 | 2 |
+| Skills | 121 | 2 |
 | Races | 5 | 2 |
+| Game Configs | 36 | 3 |
+| Exp Table | 314 | 3 |
+| Level Titles | 628 | 3 |
+| Attr Modifiers | 168 | 3 |
+| Practice Params | 7 | 3 |
 
 ### 출력 파일
 
 | 파일 | 크기 | 줄 수 |
 |------|------|-------|
-| uir.yaml | 6.7 MB | 319,882 |
-| seed_data.sql | 6.1 MB | 23,063 |
-| schema.sql | 8 KB | 114 |
-| combat.lua | 4 KB | 59 |
-| classes.lua | 4 KB | 63 |
+| uir.yaml | ~7 MB | ~320K |
+| seed_data.sql | 7.2 MB | 42,876 |
+| schema.sql | 8 KB | 224 |
+| combat.lua | 1.7 KB | 62 |
+| classes.lua | 2.0 KB | 93 |
+| config.lua | 1.2 KB | 60 |
+| exp_tables.lua | 6.8 KB | 329 |
+| stat_tables.lua | 7.4 KB | 192 |
 
 ---
 
@@ -487,3 +495,59 @@ Phase 2 추가로 SQL 출력이 확대됨:
 | seed_data.sql | ~23K 줄 | ~26K 줄 (+3K) |
 
 추가된 SQL 테이블: `socials`, `help_entries`, `commands`, `skills`, `races`
+
+---
+
+## 15. Phase 3: 시스템 테이블 마이그레이션
+
+### 15-1. Game Config (게임 설정)
+
+`src/config.c`에서 CircleMUD config_parser를 재사용 (encoding="euc-kr"). **36개** 설정 추출.
+
+카테고리별 분포:
+- game: 22개 (tunnel_size, level_can_shout 등)
+- rent: 7개 (free_rent, auto_save 등)
+- room: 6개 (mortal_start_room 등)
+- idle: 3개 (idle_void, idle_rent_time 등)
+- pk/economy/corpse/port: 각 1-2개
+
+### 15-2. Experience Table + Level Titles
+
+Simoon은 `src/class.c`의 `titles[1][LVL_BULSA+1]` 배열에서 **칭호와 경험치를 동시에 추출**한다. tbaMUD과 달리 단일 테이블(class_id=0)을 전 클래스가 공유.
+
+- **Level Titles**: 628개 (314레벨 × male/female)
+- **Experience Table**: 314개 (레벨 0~313)
+
+최대 레벨이 313(LVL_BULSA)으로, tbaMUD(레벨 34)보다 10배 이상 깊은 레벨 시스템.
+
+### 15-3. Attribute Modifiers (능력치 보정)
+
+`src/constants.c`에서 CircleMUD config_parser 재사용 (encoding="euc-kr"). **168개** 항목.
+
+6개 테이블:
+- str_app (31항목): tohit, todam, carry_w, wield_w
+- dex_app_skill (26항목): p_pocket, p_locks, p_traps, p_sneak, p_hide
+- dex_app (26항목): reaction, missile_attack, defensive
+- con_app (26항목): hitp, shock
+- int_app (26항목): learn
+- wis_app (26항목): bonus
+
+### 15-4. Practice Params (연습 파라미터)
+
+`src/class.c`의 `prac_params[4][NUM_CLASSES]` 배열에서 추출. **7개** 클래스.
+
+추가로 `train_params[6][NUM_CLASSES]`에서 스탯 훈련 상한을 추출하여 PracticeParams.extensions에 머지:
+- STR_CAP, INT_CAP, WIS_CAP, DEX_CAP, CON_CAP, CHA_CAP
+
+### 15-5. 미지원 항목
+
+- **THAC0 Table**: Simoon에서 주석처리되어 있음 (사용 안 함)
+- **Saving Throws**: Simoon에서 주석처리되어 있음
+
+### 15-6. Phase 3 출력 파일 변화
+
+| 파일 | Phase 2 | Phase 3 적용 후 |
+|------|---------|-----------------|
+| schema.sql | 14 테이블 | 21 테이블 (+7) |
+| seed_data.sql | ~26K 줄 | ~43K 줄 (+17K) |
+| Lua 스크립트 | 2개 | 5개 (+config, exp_tables, stat_tables) |
