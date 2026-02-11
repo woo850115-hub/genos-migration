@@ -127,6 +127,22 @@ def parse_room_file(
     if fast_heal:
         extensions["fast_heal"] = fast_heal
 
+    no_sky = extract_int_call(text, "setNoSky")
+    if no_sky:
+        extensions["no_sky"] = no_sky
+
+    no_under = extract_int_call(text, "setNoUnder")
+    if no_under:
+        extensions["no_under"] = no_under
+
+    no_hourse = extract_int_call(text, "setNoHourse")
+    if no_hourse:
+        extensions["no_hourse"] = no_hourse
+
+    no_drop = extract_int_call(text, "setNoDrop")
+    if no_drop:
+        extensions["no_drop"] = no_drop
+
     # Props
     props = extract_prop_calls(text)
     if props:

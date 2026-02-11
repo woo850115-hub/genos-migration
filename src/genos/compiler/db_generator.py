@@ -334,7 +334,7 @@ def generate_seed_data(uir: UIR, out: TextIO) -> None:
     # Zones
     for z in uir.zones:
         cmds_json = json.dumps([
-            {"cmd": c.command, "if_flag": c.if_flag,
+            {"command": c.command, "if_flag": c.if_flag,
              "arg1": c.arg1, "arg2": c.arg2, "arg3": c.arg3, "arg4": c.arg4}
             for c in z.reset_commands
         ])

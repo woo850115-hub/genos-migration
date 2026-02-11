@@ -27,6 +27,7 @@ from genos.uir.schema import (
     SourceMudInfo,
     UIR,
     Zone,
+    ZoneResetCommand,
 )
 
 from .class_parser import parse_classes
@@ -202,6 +203,9 @@ class LPMudAdapter(BaseAdapter):
 
         # Phase 5: Infer zones from room directories
         uir.zones = self._infer_zones(uir.rooms, vnum_gen)
+
+        # Phase 5b: Generate zone reset commands from room inventories
+        self._build_reset_commands(uir, vnum_gen)
 
         # Phase 6: Game configuration (settings, driver config, combat, formulas)
         uir.game_configs = self._parse_configs(stats)
@@ -381,3 +385,44 @@ class LPMudAdapter(BaseAdapter):
             ))
 
         return zones
+
+    def _build_reset_commands(self, uir: UIR, vnum_gen: VnumGenerator) -> None:
+        """Generate zone reset commands from room_inventory/limit_mob extensions."""
+        mob_vnums = {m.vnum for m in uir.monsters}
+        item_vnums = {i.vnum for i in uir.items}
+        zone_map = {z.vnum: z for z in uir.zones}
+
+        for room in uir.rooms:
+            room_inv = room.extensions.get("room_inventory", {})
+            limit_mob = room.extensions.get("limit_mob", {})
+
+            for path, count in room_inv.items():
+                entity_vnum = vnum_gen.path_to_vnum(path)
+                if entity_vnum in mob_vnums:
+                    max_existing = count
+                    # Override with limit_mob value if available
+                    if path in limit_mob:
+                        max_existing = limit_mob[path]
+                    cmd = ZoneResetCommand(
+                        command="M",
+                        arg1=entity_vnum,
+                        arg2=max_existing,
+                        arg3=room.vnum,
+                    )
+                elif entity_vnum in item_vnums:
+                    cmd = ZoneResetCommand(
+                        command="O",
+                        arg1=entity_vnum,
+                        arg2=count,
+                        arg3=room.vnum,
+                    )
+                else:
+                    logger.debug(
+                        "room_inventory path %s (vnum=%d) not found in mobs or items",
+                        path, entity_vnum,
+                    )
+                    continue
+
+                zone = zone_map.get(room.zone_number)
+                if zone:
+                    zone.reset_commands.append(cmd)

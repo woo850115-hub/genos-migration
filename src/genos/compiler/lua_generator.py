@@ -358,6 +358,153 @@ def generate_stat_tables_lua(uir: UIR, out: TextIO) -> None:
     out.write("return StatTables\n")
 
 
+def generate_skills_lua(uir: UIR, out: TextIO) -> None:
+    """Generate skills data Lua script."""
+    out.write("-- GenOS Skills Data\n")
+    out.write("-- Auto-generated from UIR\n\n")
+    out.write("local Skills = {}\n\n")
+
+    for skill in uir.skills:
+        out.write(f"Skills[{skill.id}] = {{\n")
+        out.write(f"    name = {_lua_str(skill.name)},\n")
+        out.write(f"    spell_type = {_lua_str(skill.spell_type)},\n")
+        out.write(f"    max_mana = {skill.max_mana},\n")
+        out.write(f"    min_mana = {skill.min_mana},\n")
+        out.write(f"    mana_change = {skill.mana_change},\n")
+        out.write(f"    min_position = {skill.min_position},\n")
+        out.write(f"    targets = {skill.targets},\n")
+        out.write(f"    violent = {'true' if skill.violent else 'false'},\n")
+        out.write(f"    routines = {skill.routines},\n")
+        if skill.wearoff_msg:
+            out.write(f"    wearoff = {_lua_str(skill.wearoff_msg)},\n")
+        if skill.class_levels:
+            out.write("    class_levels = {")
+            for cls_id, lvl in sorted(skill.class_levels.items()):
+                out.write(f"[{cls_id}]={lvl},")
+            out.write("},\n")
+        korean_name = skill.extensions.get("korean_name")
+        if korean_name:
+            out.write(f"    korean_name = {_lua_str(korean_name)},\n")
+        out.write("}\n\n")
+
+    out.write("""\
+function Skills.get_by_name(name)
+    for id, skill in pairs(Skills) do
+        if type(skill) == "table" and skill.name == name then
+            return id, skill
+        end
+    end
+    return nil
+end
+
+function Skills.get_class_level(skill_id, class_id)
+    local skill = Skills[skill_id]
+    if not skill or not skill.class_levels then return nil end
+    return skill.class_levels[class_id]
+end
+
+""")
+    out.write("return Skills\n")
+
+
+def generate_races_lua(uir: UIR, out: TextIO) -> None:
+    """Generate races data Lua script."""
+    out.write("-- GenOS Races Data\n")
+    out.write("-- Auto-generated from UIR\n\n")
+    out.write("local Races = {}\n\n")
+
+    for race in uir.races:
+        out.write(f"Races[{race.id}] = {{\n")
+        out.write(f"    name = {_lua_str(race.name)},\n")
+        out.write(f"    abbrev = {_lua_str(race.abbreviation)},\n")
+        if race.stat_modifiers:
+            mods = ", ".join(
+                f"{k}={v}" for k, v in sorted(race.stat_modifiers.items())
+            )
+            out.write(f"    stat_mods = {{{mods}}},\n")
+        if race.allowed_classes:
+            cls_list = ",".join(str(c) for c in race.allowed_classes)
+            out.write(f"    allowed_classes = {{{cls_list}}},\n")
+        for k, v in race.extensions.items():
+            if isinstance(v, str):
+                out.write(f"    {k} = {_lua_str(v)},\n")
+            elif isinstance(v, bool):
+                out.write(f"    {k} = {'true' if v else 'false'},\n")
+            elif isinstance(v, (int, float)):
+                out.write(f"    {k} = {v},\n")
+        out.write("}\n\n")
+
+    out.write("return Races\n")
+
+
+def generate_socials_lua(uir: UIR, out: TextIO) -> None:
+    """Generate socials data Lua script."""
+    out.write("-- GenOS Socials Data\n")
+    out.write("-- Auto-generated from UIR\n\n")
+    out.write("local Socials = {}\n\n")
+
+    for social in uir.socials:
+        out.write(f"Socials[{_lua_str(social.command)}] = {{\n")
+        out.write(f"    min_victim_pos = {social.min_victim_position},\n")
+        if social.no_arg_to_char:
+            out.write(f"    no_arg_char = {_lua_str(social.no_arg_to_char)},\n")
+        if social.no_arg_to_room:
+            out.write(f"    no_arg_room = {_lua_str(social.no_arg_to_room)},\n")
+        if social.found_to_char:
+            out.write(f"    found_char = {_lua_str(social.found_to_char)},\n")
+        if social.found_to_room:
+            out.write(f"    found_room = {_lua_str(social.found_to_room)},\n")
+        if social.found_to_victim:
+            out.write(f"    found_victim = {_lua_str(social.found_to_victim)},\n")
+        if social.not_found:
+            out.write(f"    not_found = {_lua_str(social.not_found)},\n")
+        if social.self_to_char:
+            out.write(f"    self_char = {_lua_str(social.self_to_char)},\n")
+        if social.self_to_room:
+            out.write(f"    self_room = {_lua_str(social.self_to_room)},\n")
+        out.write("}\n\n")
+
+    out.write("return Socials\n")
+
+
+def generate_level_titles_lua(uir: UIR, out: TextIO) -> None:
+    """Generate level titles data Lua script."""
+    out.write("-- GenOS Level Titles\n")
+    out.write("-- Auto-generated from UIR\n\n")
+    out.write("local LevelTitles = {}\n\n")
+
+    # Group by class_id → gender → level
+    grouped: dict[int, dict[str, dict[int, str]]] = {}
+    for lt in uir.level_titles:
+        if lt.class_id not in grouped:
+            grouped[lt.class_id] = {}
+        if lt.gender not in grouped[lt.class_id]:
+            grouped[lt.class_id][lt.gender] = {}
+        grouped[lt.class_id][lt.gender][lt.level] = lt.title
+
+    for class_id in sorted(grouped):
+        out.write(f"LevelTitles[{class_id}] = {{\n")
+        for gender in sorted(grouped[class_id]):
+            out.write(f"    {gender} = {{")
+            for level in sorted(grouped[class_id][gender]):
+                title = grouped[class_id][gender][level]
+                out.write(f"[{level}]={_lua_str(title)},")
+            out.write("},\n")
+        out.write("}\n\n")
+
+    out.write("""\
+function LevelTitles.get_title(class_id, level, gender)
+    local cls = LevelTitles[class_id]
+    if not cls then return nil end
+    local g = cls[gender] or cls["male"]
+    if not g then return nil end
+    return g[level]
+end
+
+""")
+    out.write("return LevelTitles\n")
+
+
 def _lua_str(s: str) -> str:
     """Escape a string for Lua."""
     escaped = s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")

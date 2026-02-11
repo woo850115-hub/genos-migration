@@ -52,6 +52,27 @@ void create()
 }
 """
 
+SAMPLE_ROOM_RESTRICTIONS = """\
+#include <구조.h>
+inherit LIB_ROOM;
+
+void create()
+{
+  room::create();
+  setShort("좁은 동굴");
+  setLong("좁고 어두운 동굴이다.");
+  setExits(([
+    "남" : "/방/동굴/cave02",
+  ]));
+  setRoomAttr(0);
+  setNoSky(1);
+  setNoUnder(1);
+  setNoHourse(1);
+  setNoDrop(1);
+  reset();
+}
+"""
+
 SAMPLE_ROOM_PROPS = """\
 #include <구조.h>
 inherit LIB_ROOM;
@@ -151,6 +172,19 @@ class TestRoomParser:
         dest_vnums = {e.destination for e in room1.exits}
         expected_vnum = vnum_gen.path_to_vnum("/방/곤륜산/grs10186")
         assert expected_vnum in dest_vnums
+
+    def test_room_restrictions(self, tmp_path):
+        lib_dir = tmp_path
+        filepath = _write_room_file(lib_dir, "방/동굴/cave01.c", SAMPLE_ROOM_RESTRICTIONS)
+        vnum_gen = VnumGenerator()
+
+        room, pending = parse_room_file(filepath, lib_dir, vnum_gen)
+
+        assert room is not None
+        assert room.extensions["no_sky"] == 1
+        assert room.extensions["no_under"] == 1
+        assert room.extensions["no_hourse"] == 1
+        assert room.extensions["no_drop"] == 1
 
     def test_non_room_file(self, tmp_path):
         lib_dir = tmp_path

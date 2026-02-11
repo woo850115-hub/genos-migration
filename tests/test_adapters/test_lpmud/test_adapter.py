@@ -226,6 +226,101 @@ class TestLPMudAdapter:
         assert uir.migration_stats.total_rooms == 2
         assert uir.migration_stats.total_monsters == 1
 
+    def test_build_reset_commands_mob(self, tmp_path):
+        """room_inventory의 mob 경로 → M reset command 생성."""
+        root = _create_minimal_lpmud(tmp_path)
+        # room01에 setRoomInventory 추가 (mob 스폰)
+        room_dir = root / "lib" / "방" / "테스트"
+        room1 = '''\
+#include <구조.h>
+inherit LIB_ROOM;
+void create() {
+  room::create();
+  setShort("테스트 방");
+  setLong("테스트 방 설명입니다.");
+  setExits(([ "남" : "/방/테스트/room02" ]));
+  setRoomInventory(([ "/방/테스트/mob/test_mob" : 2 ]));
+  setOutSide();
+  reset();
+}
+'''
+        (room_dir / "room01.c").write_bytes(room1.encode("euc-kr"))
+
+        adapter = LPMudAdapter(root)
+        uir = adapter.parse()
+
+        # Find zone that has reset commands
+        cmds = []
+        for z in uir.zones:
+            cmds.extend(z.reset_commands)
+
+        m_cmds = [c for c in cmds if c.command == "M"]
+        assert len(m_cmds) >= 1
+        # arg1 = mob vnum, arg2 = max_existing (2), arg3 = room vnum
+        assert m_cmds[0].arg2 == 2
+
+    def test_build_reset_commands_item(self, tmp_path):
+        """room_inventory의 item 경로 → O reset command 생성."""
+        root = _create_minimal_lpmud(tmp_path)
+        room_dir = root / "lib" / "방" / "테스트"
+        room1 = '''\
+#include <구조.h>
+inherit LIB_ROOM;
+void create() {
+  room::create();
+  setShort("테스트 방");
+  setLong("테스트 방 설명입니다.");
+  setExits(([ "남" : "/방/테스트/room02" ]));
+  setRoomInventory(([ "/물체/무기/test_weapon" : 1 ]));
+  setOutSide();
+  reset();
+}
+'''
+        (room_dir / "room01.c").write_bytes(room1.encode("euc-kr"))
+
+        adapter = LPMudAdapter(root)
+        uir = adapter.parse()
+
+        cmds = []
+        for z in uir.zones:
+            cmds.extend(z.reset_commands)
+
+        o_cmds = [c for c in cmds if c.command == "O"]
+        assert len(o_cmds) >= 1
+        assert o_cmds[0].arg2 == 1
+
+    def test_build_reset_commands_limit_mob(self, tmp_path):
+        """setLimitMob이 있으면 M 명령의 arg2를 오버라이드."""
+        root = _create_minimal_lpmud(tmp_path)
+        room_dir = root / "lib" / "방" / "테스트"
+        room1 = '''\
+#include <구조.h>
+inherit LIB_ROOM;
+void create() {
+  room::create();
+  setShort("테스트 방");
+  setLong("테스트 방 설명입니다.");
+  setExits(([ "남" : "/방/테스트/room02" ]));
+  setRoomInventory(([ "/방/테스트/mob/test_mob" : 3 ]));
+  setLimitMob(([ "/방/테스트/mob/test_mob" : 10 ]));
+  setOutSide();
+  reset();
+}
+'''
+        (room_dir / "room01.c").write_bytes(room1.encode("euc-kr"))
+
+        adapter = LPMudAdapter(root)
+        uir = adapter.parse()
+
+        cmds = []
+        for z in uir.zones:
+            cmds.extend(z.reset_commands)
+
+        m_cmds = [c for c in cmds if c.command == "M"]
+        assert len(m_cmds) >= 1
+        # arg2 should be 10 (limit_mob), not 3 (room_inventory count)
+        assert m_cmds[0].arg2 == 10
+
     def test_real_data_detect(self):
         """Test detection on actual 10woongi data."""
         real_path = Path("/home/genos/workspace/10woongi")

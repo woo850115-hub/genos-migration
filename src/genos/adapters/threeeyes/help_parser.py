@@ -45,10 +45,19 @@ def parse_help_file(filepath: Path) -> HelpEntry | None:
 
 
 def parse_all_help(help_dir: Path) -> list[HelpEntry]:
-    """Parse all help files in the help directory."""
+    """Parse all help files in the help directory.
+
+    Entries with empty keywords (all keywords are whitespace-only) are
+    filtered out as they produce invalid SQL inserts.
+    """
     entries: list[HelpEntry] = []
     for fpath in sorted(help_dir.glob("help.*")):
         entry = parse_help_file(fpath)
         if entry is not None:
+            # Filter out entries where all keywords are empty/whitespace
+            real_keywords = [k for k in entry.keywords if k.strip()]
+            if not real_keywords:
+                logger.debug("Skipping help entry with empty keywords: %s", fpath)
+                continue
             entries.append(entry)
     return entries

@@ -177,13 +177,35 @@ class CircleMudAdapter(BaseAdapter):
     # ── Internals ───────────────────────────────────────────────────────
 
     def _get_data_files(self, subdir: str) -> list[Path]:
-        """Get all data files in a world sub-directory, sorted."""
+        """Get data files listed in the index file for a world sub-directory.
+
+        CircleMUD/tbaMUD uses an 'index' file in each world sub-directory
+        to list which data files should be loaded. Files on disk but not
+        in the index (e.g. orphaned backups) are excluded.
+        """
         data_dir = self._world_dir / subdir
         if not data_dir.is_dir():
             return []
+        index_file = data_dir / "index"
+        if index_file.exists():
+            files = []
+            seen: set[str] = set()
+            for line in index_file.read_text(
+                encoding="utf-8", errors="replace"
+            ).splitlines():
+                fname = line.strip()
+                if not fname or fname.startswith("$"):
+                    break
+                if fname in seen:
+                    continue
+                seen.add(fname)
+                fpath = data_dir / fname
+                if fpath.is_file():
+                    files.append(fpath)
+            return files
+        # Fallback: glob all matching files if no index exists
         ext = f".{subdir}"
-        files = sorted(data_dir.glob(f"*{ext}"))
-        return files
+        return sorted(data_dir.glob(f"*{ext}"))
 
     def _parse_all(self, subdir, parser_func, stats):
         """Parse all files in a sub-directory using the given parser."""

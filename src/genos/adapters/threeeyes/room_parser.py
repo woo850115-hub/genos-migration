@@ -232,15 +232,19 @@ def parse_all_rooms(rooms_dir: Path) -> list[Room]:
     """Parse all room files in the rooms directory.
 
     Room files are organized as rooms/r{nn}/r{nnnnn}.
+    Rooms with vnum=0 are filtered out (invalid/placeholder entries).
+    Duplicates by vnum are deduplicated, keeping the first occurrence.
     """
     rooms: list[Room] = []
+    seen_vnums: set[int] = set()
     for zone_dir in sorted(rooms_dir.glob("r[0-9][0-9]")):
         if not zone_dir.is_dir():
             continue
         for room_file in sorted(zone_dir.glob("r[0-9][0-9][0-9][0-9][0-9]")):
             try:
                 room = parse_room_file(room_file)
-                if room is not None:
+                if room is not None and room.vnum != 0 and room.vnum not in seen_vnums:
+                    seen_vnums.add(room.vnum)
                     rooms.append(room)
             except Exception as e:
                 logger.warning("Error parsing %s: %s", room_file, e)

@@ -17,6 +17,10 @@ from .lua_generator import (
     generate_combat_lua,
     generate_config_lua,
     generate_exp_table_lua,
+    generate_level_titles_lua,
+    generate_races_lua,
+    generate_skills_lua,
+    generate_socials_lua,
     generate_stat_tables_lua,
     generate_trigger_lua,
 )
@@ -89,6 +93,31 @@ class GenosCompiler:
             with open(stat_path, "w") as f:
                 generate_stat_tables_lua(self.uir, f)
             generated[str(stat_path)] = "Stat modifier tables"
+
+        # Skills, Races, Socials, Level Titles
+        if self.uir.skills:
+            skills_path = lua_dir / "skills.lua"
+            with open(skills_path, "w") as f:
+                generate_skills_lua(self.uir, f)
+            generated[str(skills_path)] = "Skills data"
+
+        if self.uir.races:
+            races_path = lua_dir / "races.lua"
+            with open(races_path, "w") as f:
+                generate_races_lua(self.uir, f)
+            generated[str(races_path)] = "Races data"
+
+        if self.uir.socials:
+            socials_path = lua_dir / "socials.lua"
+            with open(socials_path, "w") as f:
+                generate_socials_lua(self.uir, f)
+            generated[str(socials_path)] = "Socials data"
+
+        if self.uir.level_titles:
+            level_titles_path = lua_dir / "level_titles.lua"
+            with open(level_titles_path, "w") as f:
+                generate_level_titles_lua(self.uir, f)
+            generated[str(level_titles_path)] = "Level titles"
 
         # Phase 4: Korean NLP (always generated)
         nlp_path = lua_dir / "korean_nlp.lua"

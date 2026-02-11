@@ -1047,8 +1047,8 @@ Tier 3: 복잡한 명령어 (수동)
 
 ```markdown
 - [x] Rooms (방)              [C,S] UIR + SQL 출력
-- [x] Items (아이템)           [C,S] UIR + SQL 출력
-- [x] Monsters (몬스터)        [C,S] UIR + SQL 출력, Simoon은 extensions 지원
+- [x] Items (아이템)           [C,S] UIR + SQL 출력 (index 기반 파싱, 고아 파일 제외)
+- [x] Monsters (몬스터)        [C,S] UIR + SQL 출력, Simoon은 extensions 지원 (index 기반 파싱)
 - [x] Zones (지역)             [C,S] UIR + SQL 출력, 리셋 명령어 포함
 - [x] Classes (직업)           [C,S] 기본 4클래스(tbaMUD)/7클래스(Simoon) → SQL + Lua 출력
 ```
@@ -1069,7 +1069,7 @@ Tier 3: 복잡한 명령어 (수동)
 - [x] Socials (감정표현)       [C,S] lib/misc/socials 파싱 → SQL 출력 (tbaMUD 104개, Simoon 104개)
 - [x] Help (도움말)            [C,S] lib/text/help/*.hlp 파싱 → SQL 출력 (tbaMUD 721개, Simoon 2,220개)
 - [x] Skills (메타데이터)      [C,S] C 소스 3파일 결합 파싱 → SQL 출력 (tbaMUD 54개, Simoon 79개)
-- [x] Commands (목록)          [C,S] src/interpreter.c cmd_info[] 파싱 → SQL 출력 (tbaMUD 275개, Simoon 546개)
+- [x] Commands (목록)          [C,S] src/interpreter.c cmd_info[] 파싱 → SQL 출력 (tbaMUD 275개, Simoon 538개)
 - [ ] Factions/Alignment       해당 MUD에 존재 시
 ```
 
@@ -1117,9 +1117,9 @@ Tier 3: 복잡한 명령어 (수동)
 
 | 기준 | 목표 | tbaMUD | Simoon | 3eyes | 10woongi | 상태 |
 |------|------|--------|--------|-------|----------|------|
-| 방 마이그레이션 | 100개+ | 12,700 | 6,508 | 7,439 | 17,590 | 달성 |
-| 아이템 | 50개+ | 4,765 | 1,753 | 1,362 | 969 | 달성 |
-| 몬스터 | 30개+ | 3,705 | 1,374 | 1,394 | 947 | 달성 |
+| 방 마이그레이션 | 100개+ | 12,700 | 6,508 | 7,437 | 17,590 | 달성 |
+| 아이템 | 50개+ | 4,765 | 1,733 | 1,362 | 969 | 달성 |
+| 몬스터 | 30개+ | 3,705 | 1,363 | 1,394 | 947 | 달성 |
 | 직업 | 4개+ | 4 | 7 | 8 | 14 | 달성 |
 | 상점 | - | 334 | 103 | — | — | 달성 |
 | 트리거 | - | 1,461 | 0 | — | — | 달성 |
@@ -1133,7 +1133,7 @@ Tier 3: 복잡한 명령어 (수동)
 | 소셜 | 30개+ | 104 | 104 | — | — | 달성 |
 | 도움말 | 50개+ | 721 | 2,220 | 116 | 72 | 달성 |
 | 스킬 목록 | 완성 | 65 | 121 | 63 | 51 | 달성 |
-| 커맨드 목록 | 완성 | 301 | 550 | — | 51 | 달성 |
+| 커맨드 목록 | 완성 | 301 | 538 | — | 51 | 달성 |
 | 종족 (해당 시) | 존재하면 | — | 5 | 8 | — | 달성 |
 | 테스트 | 전체 통과 | 144 | 144 | 175 | 354 | 달성 |
 
@@ -1171,6 +1171,48 @@ Tier 3: 복잡한 명령어 (수동)
 
 ---
 
+## 마이그레이션 품질 검증 체크리스트
+
+마이그레이션 출력물(seed_data.sql)을 엔진에 로드하기 전 반드시 검증해야 할 항목:
+
+### 중복 키 검증
+
+SQL INSERT 문의 PRIMARY KEY / UNIQUE 중복은 DB 로드 실패를 유발한다.
+모든 소스에 대해 아래 테이블의 중복 여부를 확인해야 한다.
+
+| 테이블 | 중복 키 | 발견 소스 | 원인 | 수정 |
+|--------|---------|-----------|------|------|
+| `skills` | `id` (정수) | tbaMUD | spello() 중복 호출 | skill_parser.py seen_ids 중복 제거 |
+| `game_configs` | `key` (문자열) | 10woongi | 멀티소스 config 병합 | adapter.py key 기반 중복 제거 |
+| `items` | `vnum` | Simoon | index 미등록 zone 파일 파싱 | obj_parser.py vnum 중복 제거 |
+| `monsters` | `vnum` | Simoon | index 미등록 zone 파일 파싱 | mob_parser.py vnum 중복 제거 |
+| `commands` | `name` | Simoon | cmd_info[] 중복 엔트리 | cmd_parser.py name 중복 제거 |
+| `rooms` | `vnum` | 3eyes | vnum=0 중복 | room_parser.py vnum 중복 제거 |
+| `help_entries` | `id` | 3eyes | 빈 키워드 엔트리 | help_parser.py 빈 키워드 필터링 |
+
+**검증 명령어**:
+```bash
+# 테이블별 중복 키 확인 (seed_data.sql에서)
+for table in rooms items monsters skills commands shops help_entries game_configs; do
+  count=$(grep "^INSERT INTO ${table}" seed_data.sql | grep -oP "VALUES\s*\(\K[^,)']+" | sort | uniq -d | wc -l)
+  [ "$count" -gt 0 ] && echo "DUPLICATE: ${table} has ${count} duplicate keys"
+done
+```
+
+### 엔진 프롬프트 마이그레이션
+
+각 게임의 플레이 중 상태 표시 프롬프트는 마이그레이션 도구가 아닌 **엔진 플러그인**에서 구현해야 한다.
+게임마다 표시 형식과 스탯이 다르므로 `playing_prompt()` 훅으로 게임별 구현:
+
+| 게임 | 프롬프트 형식 | 구현 위치 |
+|------|--------------|-----------|
+| tbaMUD | `< HP/maxHP hp MN/maxMN mn MV/maxMV mv >` | `games/tbamud/game.py` |
+| 10woongi | `< 체력:HP/max 내력:SP/max 이동:MP/max >` | `games/10woongi/game.py` |
+| Simoon | (향후 구현) | `games/simoon/game.py` |
+| 3eyes | (향후 구현) | `games/3eyes/game.py` |
+
+---
+
 ## 부록: MUD별 특수사항
 
 ### CircleMUD/tbaMUD
@@ -1202,6 +1244,6 @@ Tier 3: 복잡한 명령어 (수동)
 
 ---
 
-**문서 버전**: 1.5
-**최종 업데이트**: 2026-02-10 — LP-MUD/FluffOS (10woongi) 어댑터 완료 반영 (LPMudAdapter 9파서, 94테스트, 4소스 마이그레이션 지원)
+**문서 버전**: 1.6
+**최종 업데이트**: 2026-02-11 — 중복 키 검증 체크리스트 추가, 엔진 프롬프트 마이그레이션 항목 추가, 4소스 중복 키 버그 수정 반영
 **피드백**: 마이그레이션 진행하면서 계속 개선
