@@ -1,7 +1,7 @@
 # GenOS 마이그레이션 통합 갭 분석 v4
 
-> 7개 게임 심층 분석 기반 데이터 모델 비교
-> 최종 업데이트: 2026-02-11
+> 7개 게임 심층 분석 기반 데이터 모델 비교 + 런타임 메커닉 분석
+> 최종 업데이트: 2026-02-12 | 런타임 메커닉 갭 분석 추가
 
 ---
 
@@ -291,3 +291,110 @@ SmaugAdapter      → 99hunter  (완전 새 엔진, 에리어 파일 포맷)
 | Muhan13Adapter | 3eyes 파일 탐색/존 분류 | struct offset 재매핑, creature2 파서 | **중** |
 | MurimAdapter | 3eyes 기본 구조 | 3,380B creature, 492B object, mukong 파서 | **상** |
 | SmaugAdapter | 없음 (새 엔진) | 에리어 파서, skills.dat/명령어.dat 파서, &색상 변환 | **상** |
+
+---
+
+## 8. 런타임 메커닉 갭 분석
+
+> 각 게임 audit 문서의 런타임 섹션을 종합한 엔진 설계 관점의 갭 분석
+
+### 8.1 엔진 계보별 런타임 유형
+
+| 유형 | 게임 | 전투 루프 | 타이밍 | 핵심 특징 |
+|------|------|----------|--------|----------|
+| CircleMUD 표준 | tbaMUD | violence_update 글로벌 | 2초 | d20 THAC0, 스킬% multi-hit |
+| CircleMUD 간소화 | Simoon | violence_update 글로벌 | 2초 | PC THAC0=1 고정, 레벨 multi-hit, 환생 |
+| Mordor 표준 | 3eyes, muhan13 | combat_round 방 단위 | 1초 | d30 THAC0, 마법 영역 |
+| Mordor 확장 | murim | combat_round 방 단위 | 1초 | d20(!), 내공/외공, 무공 art[] |
+| LP-MUD 턴제 | 10woongi | heart_beat 턴제 | 1초 | 턴제 전투, 크리티컬 14배 |
+| SMAUG | 99hunter | violence_update 글로벌 | ~2초 | d20, RIS, fighting style, 5-hit |
+
+### 8.2 런타임 관련 누락 데이터 (엔진 구현 시 필요)
+
+#### 필수 (전투 작동에 직접 필요)
+
+| # | 게임 | 런타임 데이터 | 현재 상태 | 필요 작업 |
+|---|------|-------------|----------|----------|
+| R1 | tbaMUD | 전투 메시지 (55 M블록) | 미파싱 | messages 파서 (tbaMUD 파서 재사용) |
+| R2 | Simoon | 전투 메시지 (EUC-KR, 한국어 조사) | 미파싱 | tbaMUD 파서 + encoding="euc-kr" |
+| R3 | 3eyes | 공격 스펠 수치 (ospell[26]) | 데이터 확인됨 | global.c 파서 추가 |
+| R4 | 10woongi | 기술 데미지 공식 (367파일) | **0%** | LPC 기술 파일 파서 (최대 도전) |
+| R5 | 10woongi | 방어 공식 상수 (전투.h) | 파싱됨 | 이미 config_parser에 포함 |
+| R6 | 99hunter | RIS 매핑 (몬스터별) | 미파싱 | 에리어 파일 파서에 포함 필요 |
+| R7 | murim | 내공/외공 데미지 분리 상수 | 소스 확인됨 | 파서 구현 필요 (새 어댑터) |
+
+#### 중요 (게임 밸런스/경험에 필요)
+
+| # | 게임 | 런타임 데이터 | 현재 상태 | 필요 작업 |
+|---|------|-------------|----------|----------|
+| R8 | tbaMUD | backstab_mult 배수 테이블 | 소스 확인됨 | C 소스 파싱 or 하드코딩 |
+| R9 | Simoon | 환생 조건 (303레벨, 경험치) | 소스 확인됨 | game_configs 확장 |
+| R10 | 3eyes | 환생 조건 (200레벨, 4단계) | 소스 확인됨 | game_configs 확장 |
+| R11 | 10woongi | 몹 healBody 비율 (8/9/13%) | 소스 확인됨 | game_configs 확장 |
+| R12 | 10woongi | 몹종류 사망 조건 (0:HP, 1:HP+SP) | 소스 확인됨 | monster extensions |
+| R13 | murim | 일격필살 조건 (100배) | 소스 확인됨 | game_configs 확장 |
+| R14 | 99hunter | fighting_style 배수 (±20%) | 소스 확인됨 | game_configs 확장 |
+| R15 | 99hunter | max_dam = level×1000 | 소스 확인됨 | game_configs 확장 |
+
+### 8.3 엔진 CombatSystem Protocol 설계 포인트
+
+소스 분석 결과 7개 게임의 전투 시스템을 추상화하려면 다음 메서드가 필수:
+
+```
+class CombatSystem(Protocol):
+    # 전투 루프
+    async def combat_tick(self, world) -> None             # violence_update / combat_round / heart_beat
+
+    # 명중 판정
+    def calc_to_hit(self, attacker, victim) -> bool        # d20/d30/고정/없음 (4종)
+
+    # 데미지 계산
+    def calc_damage(self, attacker, victim, skill) -> int   # 무기/스킬/크리티컬 통합
+
+    # 방어 계산
+    def calc_defense(self, victim, damage_type) -> int      # AC/RIS/autoDefence/fighting_style
+
+    # 다중 공격
+    def calc_num_attacks(self, attacker) -> int              # 스킬%/레벨/없음 (3종)
+
+    # 사망 체크
+    def check_death(self, victim) -> bool                    # HP≤0 / HP+SP≤0 / 단계적
+
+    # 사망 처리
+    async def handle_death(self, killer, victim) -> None     # 경험치/패널티/시체/부활
+
+    # 경험치 분배
+    def distribute_exp(self, killer, victim, room) -> None   # 단독/파티/4종
+
+    # 회복
+    def calc_regen(self, character) -> tuple[int,int,int]    # HP/MP/MOVE
+```
+
+### 8.4 게임별 CombatSystem 구현 복잡도
+
+| 게임 | 구현 복잡도 | 핵심 고유 로직 |
+|------|-----------|--------------|
+| tbaMUD | **하** | 표준 CircleMUD, 대부분 테이블 참조 |
+| Simoon | **하-중** | PC THAC0=1, 환생, 이중화폐 추가 |
+| 3eyes | **중** | d30, 4마법 영역, proficiency[5] 보정 |
+| muhan13 | **중** | 3eyes + 은행/제련/결혼 시스템 |
+| murim | **상** | d20, 내공/외공 분리, art[256], 분신, 일격필살 |
+| 10woongi | **상** | 턴제 (유일), 크리티컬 14배, 몹종류별 사망, 파티 분배 |
+| 99hunter | **중-상** | RIS 시스템, fighting style, 5-hit, max_dam 상한 |
+
+### 8.5 데이터 → 엔진 매핑 갭 요약
+
+현재 마이그레이션 도구가 출력하는 SQL/Lua 데이터와 엔진이 필요로 하는 런타임 데이터 간의 갭:
+
+| 카테고리 | 마이그레이션 출력 (현재) | 엔진 필요 (추가) |
+|----------|----------------------|-----------------|
+| 전투 공식 | — | THAC0 타입, dice 모드, 크리티컬 배수 |
+| 사망 조건 | — | HP 임계값, SP 조건, 사망 패널티 |
+| 다중 공격 | — | 결정 방식 (스킬%/레벨), 최대 횟수 |
+| 회복 비율 | — | 기본 비율, 방 보정, 장비 보정 |
+| 특수 시스템 | — | RIS 테이블, fighting_style, 턴제 파라미터 |
+| 전투 메시지 | — (미파싱) | 스킬→메시지 매핑 (전 게임) |
+| 환생 조건 | — | 레벨 임계값, 클래스 조건, 보상 |
+
+이 데이터는 대부분 `game_configs` 테이블 확장 또는 게임별 Lua 설정 파일로 출력할 수 있다.
+마이그레이션 도구에서 C/LPC 소스 파싱 → `game_configs` 또는 `combat_config.lua`로 변환하는 것이 자연스러운 경로.

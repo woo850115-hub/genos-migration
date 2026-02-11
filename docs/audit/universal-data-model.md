@@ -1,7 +1,7 @@
 # GenOS 범용 데이터 모델 비교 분석서
 
 > 7개 게임(tbaMUD, Simoon, 3eyes, 10woongi, muhan13, murim, 99hunter) 데이터 구조 범용 분석
-> 최종 업데이트: 2026-02-11
+> 최종 업데이트: 2026-02-12 | 런타임 메커닉 비교 추가
 
 ---
 
@@ -369,3 +369,134 @@ murim    : creature(3380B, name-first) / object(492B, +owner/enchant)  / room(~4
 10. struct 크기 및 필드 순서 (바이너리 게임)
 11. 색상 코드 체계
 12. 플레이어 파일 포맷 (비밀번호 저장 방식 포함)
+
+---
+
+## 7. 런타임 메커닉 비교
+
+### 7.1 전투 타이밍/루프
+
+| 항목 | tbaMUD | Simoon | 3eyes | 10woongi | muhan13 | murim | 99hunter |
+|------|--------|--------|-------|----------|---------|-------|----------|
+| 전투 루프 | violence_update (2초) | violence_update (2초) | combat_round (1초) | heart_beat (1초) | combat_round (1초) | combat_round (1초) | violence_update (~2초) |
+| 비전투 tick | 75초 point_update | 75초 point_update | 1초 heart_beat | 1초 heart_beat | 1초 heart_beat | 1초 heart_beat | pulse_* 다단계 |
+| 루프 방식 | 글로벌 character_list | 글로벌 character_list | 방 단위 active_fighters | 방 단위 turn/back_turn | 방 단위 active_fighters | 방 단위 active_fighters | 글로벌 char_list |
+| 턴 개념 | 없음 (실시간) | 없음 (실시간) | 없음 (실시간) | **턴제** (others_turn/back_turn) | 없음 (실시간) | 없음 (실시간) | 없음 (실시간) |
+
+### 7.2 명중 판정 (THAC0)
+
+| 항목 | tbaMUD | Simoon | 3eyes | 10woongi | muhan13 | murim | 99hunter |
+|------|--------|--------|-------|----------|---------|-------|----------|
+| 주사위 | d20 | d20 | **d30** | 없음 (기술 기반) | **d30** | **d20** | d20 |
+| PC THAC0 | class_table[class][level] | **1 (고정!)** | thaco_list[class][level/10] | — | thaco_list[class][level/10] | thaco_list[class][level/10] | Thac0→Thac32 보간 |
+| NPC THAC0 | level 기반 | 20 (기본) | mob.thaco | — | mob.thaco | mob.thaco | mob 데이터 |
+| 보정치 | hitroll + STR | hitroll + **INT/WIS** | hitroll + STR | — | hitroll + STR | hitroll + STR | hitroll + STR |
+| 특이사항 | 표준 | PC 30레벨+ 거의 100% 명중 | 30면체 (명중률 낮음) | 명중 판정 없음 (턴제) | 30면체 | 20면체 (3eyes와 다름!) | 보간 공식 |
+
+### 7.3 데미지 계산
+
+| 항목 | tbaMUD | Simoon | 3eyes | 10woongi | muhan13 | murim | 99hunter |
+|------|--------|--------|-------|----------|---------|-------|----------|
+| 무기 데미지 | XdY | XdY | ndice×D(sdice)+pdice | MinDamage+rand(Range) | ndice×D(sdice)+pdice | ndice×D(sdice)+pdice | XdY |
+| 스킬 데미지 | spell별 고유 | spell별 고유 | ospell dice | (스탯×계수+skill×N)/분모 | 소스 내 dice | dice+스탯보정 | Dammsg |
+| damroll 보정 | + damroll | + damroll | + pdice (bonus) | + STR bonus | + pdice | + pdice | + damroll |
+| 크리티컬 | 없음 | 없음 | 없음 | 민첩≥random(200)→**14배** | 없음 | **일격필살 (100배)** | 없음 |
+| 상한 | 없음 | 없음 | 없음 | 없음 | 없음 | 없음 | level×1000 |
+| 특수 데미지 | — | — | — | 내공×8~10 가산 | — | **내공/외공** 분리 | fighting_style ±20% |
+
+### 7.4 다중 공격 (Multi-Hit)
+
+| 항목 | tbaMUD | Simoon | 3eyes | 10woongi | muhan13 | murim | 99hunter |
+|------|--------|--------|-------|----------|---------|-------|----------|
+| 최대 횟수 | 3 | 5 | 1 | 1 (기술 ATTACK_TURN) | 1 | 1 | 5 |
+| 결정 기준 | 2nd/3rd attack 스킬% | **레벨 기반** (150+→5) | — | — | — | — | **스킬%** (5단계) |
+| NPC | mob_specials | attack1/2/3 확률 | — | — | — | — | numattacks |
+| 랜덤 추가 | 없음 | 10% +1, 희귀 +2 | — | — | — | 분신법술 (2체 분신) | — |
+
+### 7.5 방어/감소 계산
+
+| 항목 | tbaMUD | Simoon | 3eyes | 10woongi | muhan13 | murim | 99hunter |
+|------|--------|--------|-------|----------|---------|-------|----------|
+| AC 역할 | 명중 판정 보정 | 명중 판정 보정 | 명중 판정 보정 | **데미지 감소** | 명중 판정 보정 | 명중 판정 보정 | 명중 판정 보정 |
+| Sanctuary | 데미지 ½ | 데미지 ½ | 데미지 ½ | — | 데미지 ½ | 데미지 ½ | 데미지 ½ |
+| 추가 방어 | — | — | — | autoDefence (민첩×8/100+AC/4+투지/20) | — | — | — |
+| SP 방어 | — | — | — | autoSpDefence (지혜×5/100+?) | — | — | — |
+| 스킬 방어 | — | — | — | skillDefence (상태이상 저항) | — | — | — |
+| RIS | — | — | — | — | — | — | **fire/cold/acid/elec/energy/drain/poison + blunt/pierce/slash** |
+| 반격 | — | **SKILL_REATT** (10%) | — | — | — | — | — |
+| Fighting Style | — | — | — | — | — | — | evasive/defensive/standard/aggressive/berserk |
+
+### 7.6 사망 처리
+
+| 항목 | tbaMUD | Simoon | 3eyes | 10woongi | muhan13 | murim | 99hunter |
+|------|--------|--------|-------|----------|---------|-------|----------|
+| 사망 조건 | HP ≤ -11 | HP ≤ -11 | HP ≤ 0 | 몹종류0: HP≤0, 몹종류1: HP≤0 **AND** SP≤0 | HP ≤ 0 | HP ≤ 0 | HP ≤ -11 |
+| PvM 패널티 | 경험치 손실 | **능력치 감소** (50+) | 경험치 손실 | 없음 (죽는 쪽이 몹) | 경험치 손실 | 경험치 4종 중 택 | **주석 처리** (실질 없음) |
+| PvP 패널티 | 없음 | **없음** (킬마크 지급) | — | 없음 | — | — | — |
+| 시체 생성 | make_corpse() | make_corpse() | — | 없음 (즉시 소멸) | — | — | make_corpse() |
+| 부활 장소 | start_room | start_room | recall | 부활좌표 | recall | recall | temple |
+| 특수 | — | maxHP/MANA/MOVE 영구감소 | — | eventDie()→ExpType별 분배 | — | — | — |
+
+### 7.7 경험치 분배
+
+| 항목 | tbaMUD | Simoon | 3eyes | 10woongi | muhan13 | murim | 99hunter |
+|------|--------|--------|-------|----------|---------|-------|----------|
+| 분배 방식 | 킬러 단독 | 킬러 단독 | 킬러 단독 | **파티 분배** (같은 방) | 킬러 단독 | **4종 분리** | 킬러 단독 |
+| 10w 분배율 | — | — | — | 킬러60%/그룹10-15%/최고피해10-25% | — | — | — |
+| murim 4종 | — | — | — | — | — | 일반/실전/문파/무공 각각 분리 | — |
+| 패널티 | 레벨 차 미적용 | 레벨 차 미적용 | 레벨 차 미적용 | 없음 | 레벨 차 미적용 | 레벨 차 미적용 | 레벨 차 미적용 |
+
+### 7.8 HP/MP 회복
+
+| 항목 | tbaMUD | Simoon | 3eyes | 10woongi | muhan13 | murim | 99hunter |
+|------|--------|--------|-------|----------|---------|-------|----------|
+| 기본 | graf() 연령 기반 | graf() 연령 기반 | 1초 heart_beat | 10초 healBody | 1초 heart_beat | 1초 heart_beat | pulse_* |
+| 위치 배수 | sleeping/resting/sitting | sleeping/resting/sitting | 없음 | 없음 | 없음 | 없음 | 있음 |
+| 10w 몹 | — | — | — | **8% HP / 9% SP / 13% MP** (10초) | — | — | — |
+| 장비 보정 | — | ITEM_MANA_REGEN +10 | — | — | — | — | — |
+| 방 보정 | — | ROOM_GOOD_REGEN (HP×4) | — | fast_heal | — | — | — |
+
+### 7.9 화폐/경제 시스템
+
+| 항목 | tbaMUD | Simoon | 3eyes | 10woongi | muhan13 | murim | 99hunter |
+|------|--------|--------|-------|----------|---------|-------|----------|
+| 기본 화폐 | gold | gold | gold | gold | gold | gold | gold |
+| 추가 화폐 | — | **crystal + killmark** | — | — | — | **killmark** | — |
+| 은행 | — | — | — | banker (1억 한도) | **bank.c** | **bank.c** | — |
+| 특수 | — | crystal 레벨업 지급 | — | 위탁판매 dealer | 달돌(moonstone) | 무술 구매용 killmark | — |
+
+### 7.10 환생/전직 시스템
+
+| 항목 | tbaMUD | Simoon | 3eyes | 10woongi | muhan13 | murim | 99hunter |
+|------|--------|--------|-------|----------|---------|-------|----------|
+| 존재 | 없음 | **remort (303레벨)** | **환생 (200레벨)** | 없음 | **전직 (change_class)** | **환생 (hwansaeng)** | **전직 (6기본→24고급)** |
+| 메커닉 | — | 7클래스 완료→HP/MP 100k | INVINCIBLE→CARETAKER→... | — | 같은 레벨 다른 직업 | 능력초기화+art 유지 | 기본→고급 직업 |
+| 횟수 | — | 7회 (클래스 수) | 5단계 (선택4/비활성4) | — | 8회 (직업 수) | 무한 | 1회 |
+
+### 7.11 특수 전투 메커닉
+
+| 시스템 | 게임 | 설명 |
+|--------|------|------|
+| 턴제 전투 | 10woongi | others_turn → 상대 기술 → back_turn → 내 기술, continueCombat() 루프 |
+| RIS (내성) | 99hunter | Resist/Immune/Susceptible: 화/냉/산/전기/에너지/흡수/독 + 타격/관통/참격 |
+| Fighting Style | 99hunter | 5단계: evasive(-20% dam)/defensive(-10%)/standard/aggressive(+10%)/berserk(+20%) |
+| 내공/외공 | murim | 내공 = MP 기반 추가 데미지, 외공 = STR 기반 물리 데미지, 별도 계산 |
+| 분신법술 | murim | 동영인 전용, 환생 필수, 2체 분신 몹 생성 → 동시 공격 |
+| 독 시스템 | 10woongi | poisoned → heart_beat마다 HP 감소, curePoison() 해독 |
+| 무기 레벨 | 10woongi | WeaponSize(1-5) vs 몹 크기 비교 → 소형 무기로 대형 몹 공격 불가 |
+| 활/화살 | Simoon | ITEM_BOW + ITEM_ARROW 조합, 화살 소모 (무게 -1), 데미지 ×2 |
+| 뱀파이어 | 99hunter | IS_VAMPIRE → 낮 HP 손실, 밤 HP 회복, bloodlet 스킬 |
+| 반격 | Simoon | SKILL_REATT 10% 확률, 피해자 레벨 ≥ 공격자 → 공격자 반사 피해 |
+
+### 7.12 통합 설계 시사점 — 런타임
+
+1. **전투 루프 추상화**: 2종 (글로벌 리스트 순회 vs 방 단위 턴제) → CombatSystem Protocol로 통합
+2. **THAC0/명중 판정**: 4종 (d20/d30/고정/없음) → `calc_to_hit(attacker, victim)` 추상 메서드
+3. **데미지 공식**: 게임마다 완전 다름 → `calc_damage(attacker, victim, skill)` 추상 메서드
+4. **사망 조건**: HP≤0 단일 vs HP+SP 동시 vs 단계적 → `check_death(victim)` 추상 메서드
+5. **다중 공격**: 스킬%/레벨/없음 → `calc_num_attacks(attacker)` 추상 메서드
+6. **회복**: 연령 기반/시간 기반/장비 기반 → `calc_regen(character)` 추상 메서드
+7. **경험치 분배**: 단독/파티/4종 분리 → `distribute_exp(killer, victim, room)` 추상 메서드
+8. **특수 시스템은 플러그인**: RIS, 턴제, 문파, 무공 → 게임별 플러그인에서 처리
+9. **화폐**: gold 공통 + extensions JSONB (crystal, killmark 등)
+10. **환생/전직**: 게임별 완전 고유 → 플러그인 이벤트 훅 (on_level_max, on_remort)

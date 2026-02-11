@@ -1,14 +1,14 @@
 # GenOS ANSI 컬러 포맷 레퍼런스
 
-**Version**: 1.0
-**Last Updated**: 2026-02-10
+**Version**: 2.0
+**Last Updated**: 2026-02-12
 **Author**: 누렁이
 
 ---
 
 ## 1. 개요
 
-GenOS는 4개 게임(tbaMUD, Simoon, 3eyes, 10woongi)의 서로 다른 컬러 코드를 **하나의 공통 포맷**으로 통일한다. 마이그레이션 도구가 원본 코드를 GenOS 포맷으로 변환하고, 엔진이 GenOS 포맷을 ANSI 이스케이프로 최종 출력한다.
+GenOS는 7개 게임(tbaMUD, Simoon, 3eyes, 10woongi, muhan13, murim, 99hunter)의 서로 다른 컬러 코드를 **하나의 공통 포맷**으로 통일한다. 마이그레이션 도구가 원본 코드를 GenOS 포맷으로 변환하고, 엔진이 GenOS 포맷을 ANSI 이스케이프로 최종 출력한다.
 
 ```
 원본 소스 → 마이그레이션 도구 → GenOS 포맷 (DB/Lua 저장) → 엔진 → ANSI 이스케이프 (클라이언트)
@@ -213,7 +213,7 @@ SGR `38;2;R;G;B` (전경) / `48;2;R;G;B` (배경) 사용.
 
 ---
 
-## 8. 4게임 → GenOS 변환 매핑
+## 8. 7게임 → GenOS 변환 매핑
 
 ### 8.1 tbaMUD (C 매크로 → GenOS)
 
@@ -317,6 +317,91 @@ tbaMUD는 소스 코드에서 C 매크로를 사용하지만, 마이그레이션
 | `%^B_MAGENTA%^` | `{bg:magenta}` |
 | `%^B_CYAN%^` | `{bg:cyan}` |
 | `%^B_WHITE%^` | `{bg:white}` |
+
+### 8.5 muhan13 / murim (ANSI ESC 직접 → GenOS)
+
+Mordor 계열(3eyes/muhan13/murim)은 ANSI 이스케이프 시퀀스를 소스 코드에서 직접 사용한다.
+3eyes와 동일한 매핑이므로 8.3절의 `[=NF` 변환을 공유하며, 추가로 `\033[Nm` 직접 코드를 처리한다.
+
+| Mordor ANSI 코드 | GenOS 코드 | 비고 |
+|-----------------|-----------|------|
+| `\033[0m` | `{reset}` | 리셋 |
+| `\033[30m` | `{black}` | |
+| `\033[31m` | `{red}` | |
+| `\033[32m` | `{green}` | |
+| `\033[33m` | `{yellow}` | |
+| `\033[34m` | `{blue}` | |
+| `\033[35m` | `{magenta}` | |
+| `\033[36m` | `{cyan}` | |
+| `\033[37m` | `{white}` | 기본 전경 |
+| `\033[1;31m` | `{RED}` | bold+color = bright |
+| `\033[1;32m` | `{GREEN}` | |
+| `\033[1;33m` | `{YELLOW}` | |
+| `\033[1;34m` | `{BLUE}` | |
+| `\033[1;35m` | `{MAGENTA}` | |
+| `\033[1;36m` | `{CYAN}` | |
+| `\033[1;37m` | `{WHITE}` | |
+| `\033[1m` | `{bold}` | |
+| `\033[4m` | `{underline}` | |
+| `\033[5m` | `{blink}` | |
+| `\033[7m` | `{reverse}` | |
+
+### 8.6 99hunter (`&X` / `^X` 코드 → GenOS)
+
+99hunter(SMAUG 1.4)는 `&` 전경색과 `^` 배경색 코드를 사용한다.
+색상 테이블: `xrgObpcwzRGYBPCW` (16색, 소문자=dark, 대문자=bright).
+
+**전경색 (`&` 코드)**:
+
+| 99hunter 코드 | 색상 | GenOS 코드 |
+|--------------|------|-----------|
+| `&x` | BLACK | `{black}` |
+| `&r` | BLOOD (진빨강) | `{red}` |
+| `&g` | DGREEN (진녹색) | `{green}` |
+| `&O` | ORANGE (주황) | `{yellow}` |
+| `&b` | DBLUE (진파랑) | `{blue}` |
+| `&p` | PURPLE (보라) | `{magenta}` |
+| `&c` | CYAN (청록) | `{cyan}` |
+| `&w` | GREY (회색) | `{white}` |
+| `&z` | DGREY (진회색) | `{BLACK}` |
+| `&R` | RED (빨강) | `{RED}` |
+| `&G` | GREEN (녹색) | `{GREEN}` |
+| `&Y` | YELLOW (노랑) | `{YELLOW}` |
+| `&B` | BLUE (파랑) | `{BLUE}` |
+| `&P` | PINK (분홍) | `{MAGENTA}` |
+| `&C` | LBLUE (밝은파랑) | `{CYAN}` |
+| `&W` | WHITE (흰색) | `{WHITE}` |
+
+**배경색 (`^` 코드)**:
+
+| 99hunter 코드 | 색상 | GenOS 코드 |
+|--------------|------|-----------|
+| `^x` | BLACK 배경 | `{bg:black}` |
+| `^r` | 진빨강 배경 | `{bg:red}` |
+| `^g` | 진녹색 배경 | `{bg:green}` |
+| `^O` | 주황 배경 | `{bg:yellow}` |
+| `^b` | 진파랑 배경 | `{bg:blue}` |
+| `^p` | 보라 배경 | `{bg:magenta}` |
+| `^c` | 청록 배경 | `{bg:cyan}` |
+| `^w` | 회색 배경 | `{bg:white}` |
+
+**특수 코드**:
+
+| 99hunter 코드 | GenOS 코드 | 비고 |
+|--------------|-----------|------|
+| `&-` | `{blink}` | 깜빡임 |
+
+### 8.7 엔진 계보별 색상 코드 요약
+
+| 엔진 계보 | 게임 | 입력 코드 | 예시 (빨강) | GenOS 변환 |
+|-----------|------|----------|------------|-----------|
+| CircleMUD | tbaMUD | `\t코드` | `\tr` | `{red}` |
+| CircleMUD 커스텀 | Simoon | `&코드` | `&r` | `{red}` |
+| Mordor | 3eyes/muhan13/murim | `\033[Nm` | `\033[31m` | `{red}` |
+| LP-MUD | 10woongi | `%^NAME%^` | `%^RED%^` | `{red}` |
+| SMAUG | 99hunter | `&코드` | `&r` | `{red}` |
+
+> **주의**: Simoon(`&r`)과 99hunter(`&r`)는 동일 문법이나 색상 팔레트가 다름. Simoon은 표준 16색, 99hunter는 SMAUG 팔레트 (예: `&O`=주황).
 
 ---
 
@@ -470,6 +555,49 @@ def convert_10woongi_colors(text: str) -> str:
         name = m.group(1)
         return WOONGI_MAP.get(name, m.group(0))
     return re.sub(r"%\^([A-Z_]+)%\^", _replace, text)
+
+def convert_mordor_colors(text: str) -> str:
+    """Mordor (3eyes/muhan13/murim) ANSI ESC → GenOS 포맷"""
+    import re
+    MORDOR_MAP = {
+        "0": "{reset}", "1": "{bold}", "4": "{underline}",
+        "5": "{blink}", "7": "{reverse}",
+        "30": "{black}", "31": "{red}", "32": "{green}",
+        "33": "{yellow}", "34": "{blue}", "35": "{magenta}",
+        "36": "{cyan}", "37": "{white}",
+        "1;31": "{RED}", "1;32": "{GREEN}", "1;33": "{YELLOW}",
+        "1;34": "{BLUE}", "1;35": "{MAGENTA}", "1;36": "{CYAN}",
+        "1;37": "{WHITE}",
+    }
+    def _replace(m):
+        code = m.group(1)
+        return MORDOR_MAP.get(code, m.group(0))
+    return re.sub(r"\x1b\[([0-9;]+)m", _replace, text)
+
+def convert_99hunter_colors(text: str) -> str:
+    """99hunter (SMAUG) &X/^X 코드 → GenOS 포맷"""
+    # 전경색 테이블: xrgObpcwzRGYBPCW
+    FG_MAP = {
+        "x": "{black}", "r": "{red}", "g": "{green}", "O": "{yellow}",
+        "b": "{blue}", "p": "{magenta}", "c": "{cyan}", "w": "{white}",
+        "z": "{BLACK}", "R": "{RED}", "G": "{GREEN}", "Y": "{YELLOW}",
+        "B": "{BLUE}", "P": "{MAGENTA}", "C": "{CYAN}", "W": "{WHITE}",
+        "-": "{blink}",
+    }
+    # 배경색
+    BG_MAP = {
+        "x": "{bg:black}", "r": "{bg:red}", "g": "{bg:green}",
+        "O": "{bg:yellow}", "b": "{bg:blue}", "p": "{bg:magenta}",
+        "c": "{bg:cyan}", "w": "{bg:white}",
+    }
+    import re
+    def _replace_fg(m):
+        return FG_MAP.get(m.group(1), m.group(0))
+    def _replace_bg(m):
+        return BG_MAP.get(m.group(1), m.group(0))
+    text = re.sub(r"&([xrgObpcwzRGYBPCW\-])", _replace_fg, text)
+    text = re.sub(r"\^([xrgObpcw])", _replace_bg, text)
+    return text
 ```
 
 ---
@@ -525,7 +653,23 @@ GenOS:  {RED}[경고]{reset} {cyan}서버가 곧 재시작됩니다.{reset}
 출력:   \x1b[91m[경고]\x1b[0m \x1b[36m서버가 곧 재시작됩니다.\x1b[0m
 ```
 
+### 99hunter 전투 메시지
+
+```
+원본:   &R[전투]&w 당신이 &Y고블린&w에게 &G절명&w 스킬을 시전합니다!
+GenOS:  {RED}[전투]{white} 당신이 {YELLOW}고블린{white}에게 {GREEN}절명{white} 스킬을 시전합니다!
+출력:   \x1b[91m[전투]\x1b[37m 당신이 \x1b[93m고블린\x1b[37m에게 \x1b[92m절명\x1b[37m 스킬을 시전합니다!
+```
+
+### Mordor (3eyes/muhan13/murim) 방 묘사
+
+```
+원본:   \033[1;36m어둠의 동굴\033[0m\r\n\033[37m음습한 기운이 감돈다.\033[0m
+GenOS:  {CYAN}어둠의 동굴{reset}\r\n{white}음습한 기운이 감돈다.{reset}
+출력:   \x1b[96m어둠의 동굴\x1b[0m\r\n\x1b[37m음습한 기운이 감돈다.\x1b[0m
+```
+
 ---
 
-**문서 버전**: 1.0
-**최종 업데이트**: 2026-02-10 — 초판 작성. GenOS 공통 ANSI 포맷 정의, 4게임 변환 매핑, 엔진/마이그레이션 구현 가이드
+**문서 버전**: 2.0
+**최종 업데이트**: 2026-02-12 — 7게임 확장 (muhan13/murim Mordor ANSI ESC, 99hunter SMAUG &/^ 코드 추가), 엔진 계보별 요약표 추가

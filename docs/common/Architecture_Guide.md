@@ -1,7 +1,7 @@
 # GenOS Migration Tool 아키텍처 가이드
 
-**Version**: 5.0
-**Last Updated**: 2026-02-10
+**Version**: 6.0
+**Last Updated**: 2026-02-12
 
 ---
 
@@ -421,6 +421,16 @@ class MyMudAdapter(BaseAdapter):
 **3eyes config**: global.c의 C 배열 이니셜라이저 직접 파싱 (thaco_list, level_exp, bonus, class_stats, level_cycle).
 **3eyes 특이점**: 텍스트 파일이 아닌 바이너리 C 구조체 — 다른 두 어댑터와 완전히 다른 파싱 전략 사용.
 
+### 향후 어댑터 (3개 추가 예정)
+
+| 어댑터 | 대상 | 파싱 방식 | 재사용 | 난이도 |
+|--------|------|-----------|--------|--------|
+| Muhan13Adapter | muhan13 | 바이너리 (struct offset 재배치) | 3eyes 파일 탐색/존 분류 | 중 |
+| MurimAdapter | murim | 바이너리 (3,380B creature) | 없음 (새 struct) | 상 |
+| SmaugAdapter | 99hunter | 텍스트 (에리어 파일) + 외부 .dat | 없음 (새 엔진) | 상 |
+
+상세 갭 분석: `docs/audit/gap-analysis.md` 참조.
+
 ---
 
 ## 성능 특성
@@ -439,6 +449,8 @@ class MyMudAdapter(BaseAdapter):
 | 10woongi | ~16MB | ~14MB | ~17KB (5개) |
 
 ## 데이터 규모 비교
+
+### 파서 구현 완료 (4개 게임)
 
 | 항목 | tbaMUD | Simoon | 3eyes | 10woongi |
 |------|--------|--------|-------|----------|
@@ -461,3 +473,32 @@ class MyMudAdapter(BaseAdapter):
 | Level Titles | 204 | 628 | — | — |
 | Attr Modifiers | 161 | 168 | 160 | — |
 | Practice Params | 4 | 7 | — | — |
+
+### 분석 완료, 파서 미구현 (3개 게임)
+
+| 항목 | muhan13 | murim | 99hunter |
+|------|---------|-------|----------|
+| 엔진 | Mordor 2.0 | Mordor 2.0 확장 | SMAUG 1.4 |
+| Rooms | 3,218 | 미포함* | ~2,750 |
+| Items | 907 | ~1,077 | ~1,750 |
+| Monsters | 1,049 | ~683 | ~1,750 |
+| Zones | 10 | 11(맵) | 53 |
+| Help | ~228 | 30 | ~326 |
+| Skills | 56 | 126+ | 54 |
+| Commands | 350 | ~300 | 488 |
+| Classes | 8 | **21** (진급제) | **30** (6+24) |
+| Races | 8 | 4 | 8 (+91 NPC) |
+
+\* murim rooms/ 디렉토리 스냅샷 미포함
+
+### 7게임 합계
+
+| 항목 | 합계 |
+|------|------|
+| Rooms | **~50,000+** |
+| Items | **~12,300+** |
+| Monsters | **~10,650+** |
+| Skills | **~799+** |
+| Commands | **~2,415** |
+
+상세 분석: `docs/audit/universal-data-model.md` (런타임 메커닉 포함), `docs/audit/gap-analysis.md` (갭 분석) 참조.

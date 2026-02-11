@@ -1,6 +1,6 @@
 # 3eyes MUD (바이너리 C struct) 데이터 전수조사
 
-> 최종 업데이트: 2026-02-11 | 심층 분석 완료
+> 최종 업데이트: 2026-02-12 | 런타임 메커닉 분석 포함
 
 ## 1. 디렉토리 구조
 
@@ -349,3 +349,214 @@ killer/{id}/bank/{id}     (킬러 금고)
 3. **proficiency/realm 매핑 강화** — 5+4 숙련도 UIR 반영
 4. **magicpower/magicrealm** — 아이템 마법 강화 UIR 반영
 5. (선택) 게시판 글 변환 — board/ 데이터
+
+---
+
+## 11. 런타임 메커닉
+
+### 11.1 타이밍 시스템 (update.c)
+
+메인 루프 `update_game()` — 매초 호출, 시간 기반 분기:
+
+| 시스템 | 간격 | 함수 | 설명 |
+|--------|------|------|------|
+| 사용자 업데이트 | 20초 | `update_users()` | HP/MP 회복, 유휴 타임아웃 |
+| 랜덤 몬스터 | 20초 | `update_random()` | 방별 랜덤 스폰 |
+| 활성 몬스터 AI | 1초 | `update_active()` | 전투/배회/대화 |
+| 클래스 경험치 | 60초 | `update_class()` | 클래스별 보너스 |
+| 게시판 저장 | 300초 | `save_board()` | 게시판 백업 |
+
+### 11.2 전투 시스템 (command5.c: attack_crt)
+
+**명중 판정**: `thaco - AC/10`
+
+```
+n = thaco - crt_ptr->armor/10
+공포 상태: n += 2, 실명 상태: n += 5
+판정: mrand(1,30) >= n 이면 명중 (d30 기반, tbaMUD의 d20과 다름)
+```
+
+**데미지 공식**:
+
+```
+무기 공격: mdice(weapon) + bonus[strength] + profic(ply, weapon_type)/10
+맨손(야만인): mdice(player) + bonus[strength] + comp_chance(player)
+일반 맨손: mdice(player) + bonus[strength]
+마법/성직자: 별도 공식 (무기 있으면 무기 주사위만, 없으면 맨손)
+```
+
+- `bonus[]`: 스탯 보정 배열 (global.c, 35개 항목, -4 ~ +7)
+- `profic()`: 숙련도/20 정수 퍼센트
+- `comp_chance()`: 비무장 전투 보정
+
+**다중 타격**:
+
+```
+기본 1회 + 추가 확률:
+  - PUPDMG 플래그 + (INVINCIBLE lv100+): 확률적 2타
+  - INVINCIBLE 이상: 추가 확률적 3타
+  - 랜덤: mrand(0,3)>2 → +1회, 추가로 1/4 확률 +1회
+```
+
+**크리티컬**: `mod_profic()` 확률 또는 `OALCRT` 무기 플래그 → 급소 명중 (3~6배 보너스)
+
+**그림자 공격**: `SHADOW_ATTACK` 상태일 때 첫 공격에 그림자 동시 공격 (크리티컬 포함)
+
+**무기 내구도**: 25% 확률로 `shotscur--`, 0이 되면 무기 파손
+
+### 11.3 사망 시스템 (creature.c: die)
+
+**몬스터 사망**:
+
+```
+1. 적대 리스트(first_enm) 순회 → 기여도 기반 경험치 분배
+   - expdiv = (experience * damage_dealt) / MAX(hpmax, 1)
+   - MIN(expdiv, experience), MAX(expdiv, 0)
+2. alignment 변동: -victim_alignment/5 (범위 -1000~+1000)
+3. 전리품: 보유 아이템 → 방에 드롭
+4. 골드: nBombDie==0이면 공격자에게 직접 이전, 아니면 MONEY 오브젝트 생성
+5. MPERMT 플래그: die_perm_crt() → 상주 몬스터 리스폰 타이머 갱신
+6. 퀘스트: questnum 있으면 순차 퀘스트 완료 처리 (quest_exp[] 보상)
+7. 소환: MSUMMO 플래그 → summon_crt() 호출 (보스 사후 소환)
+```
+
+**플레이어 사망 (PvE)**:
+
+```
+1. 경험치 패널티: -(level_exp[level] - level_exp[level-1]) * 3/4
+   - INVINCIBLE: x5 (최소 200,000)
+   - CARETAKER: x5 (최소 1,000,000)
+   - CARE_II+: hpmax*800 + mpmax*1000
+   - 경험치 최소 -1,000,000,000 하한
+2. HP/MP 완전 회복 (PvE 사망시 풀회복, PvP는 HP만)
+3. 상태이상 해제 (독/질병)
+4. AC/THAC0 재계산
+5. 영혼방(rom 11971)으로 이동
+6. 전역 사망 공지
+```
+
+**PvP 추가**:
+
+```
+- PK 타이머: mrand(7,14) * 86400L (7~14일 쿨다운)
+- RSUVIV 방: 서바이벌 존 → 무술대회 랭킹 시스템 (InsertMusulRank)
+- 가문전(클랜전): fam_win/fam_lost 카운트, AT_WAR 상태
+```
+
+### 11.4 HP/MP 회복 (update.c: update_users)
+
+```
+매 20초:
+- bonus_power += 4 (에너지 충전, 최대 100)
+- HP 회복: class/level/position 기반
+- MP 회복: class/level 기반
+- 유휴 타임아웃: 비로그인 30초 / 플레이어 180초
+```
+
+### 11.5 랜덤 몬스터 스폰 (update.c: update_random)
+
+```
+매 20초, 각 방별:
+- 판정: mrand(1,100) > room.traffic → 스폰
+- room.random[10]에서 랜덤 선택 (VNUM)
+- 확률: 90% 1마리, 6% 2마리, 4% 3마리
+- 방 최대 인원 초과 시 스폰 안됨
+```
+
+### 11.6 몬스터 AI (update.c: update_active)
+
+```
+매 1초 (활성 몬스터만):
+1. 공격 간격: DEX < 20 → 3초, DEX ≥ 20 → 2초
+2. 대상 선택: first_enm (적대 리스트) 순서
+3. 달인/관리자(INVINCIBLE+) 장기 전투 보호: 300초 후 경험치 0
+4. 배회: numwander > 0이면 랜덤 출구로 이동
+5. 대화: talk 파일 매핑, 동일 이름+레벨 매칭
+```
+
+### 11.7 이동 시스템
+
+```
+기본 이동: 방향 명령 (북/남/동/서/위/아래) + 커스텀 출구
+- XCLOSD: 닫힌 문 (open/close/lock/unlock)
+- XLOCKD: 잠긴 문 (key 아이템 필요)
+- XSECRT: 숨겨진 문 (detect로 발견)
+- 비행: F_ISSET(PLEVIT) 필요한 특수 출구
+- DT(Death Trap): 즉사 방
+```
+
+### 11.8 마법 시스템 (magic1.c: cast)
+
+```
+1. spllist[] 순회 → 스펠 이름 매칭 (prefix 허용, 중복시 실패)
+2. RNOMAG 방 플래그: 마법 불가
+3. 쿨다운: LT_SPELL
+   - 마법사/성직자: 3초
+   - 그 외 플레이어: 5초
+   - 관리자: 1초
+   - 드래곤슬레이브(56): +3초
+   - 기가슬레이브(57): +25초
+   - 58~61번: +1초
+4. offensive_spell: ospell[] 참조 → ndice*D(sdice)+pdice 데미지
+5. 비공격: restore/teleport/bless/protect 등 직접 함수 호출
+```
+
+### 11.9 세이브/퍼시스턴스
+
+```
+- 플레이어 저장: PLAYER_DATA_PATH/{name} (바이너리 creature struct)
+- .tmp 파일: 저장 중 크래시 보호 (존재시 복구 시도)
+- 은행: player/{id}/bank/{id} (object struct)
+- 게시판: board/ 디렉토리
+- 퀘스트 경험치: LOGPATH/quests 런타임 로드
+```
+
+### 11.10 로그인 플로우 (command1.c: login)
+
+```
+case 0: ANSI 선택 (1=NoAnsi) → 로고 출력
+case 1: 이름 입력 (한글 1~5자, ishan() 검증)
+        → load_ply() 성공: 기존 캐릭터 → 비밀번호
+        → load_ply() 실패: .tmp 복구 시도 → 킬러 파일 확인 → 신규 생성
+case 2: 신규 캐릭터 확인 (1=예, 2=아니오)
+        → create_ply 진행 (성별 선택)
+case 3: 비밀번호 확인 (password = creature.talk 필드에 저장!)
+        → 마스터 패스워드 존재 ("@rladydrmsWkd@")
+```
+
+**특이사항**: 비밀번호가 `creature.talk` 필드에 평문 저장. 마스터 패스워드로 모든 계정 접근 가능.
+
+### 11.11 레벨업
+
+```
+- 경험치 테이블: level_exp[202] (global.c)
+- 레벨업: experience >= level_exp[level] 충족시
+- 스탯 증가: level_cycle[class][level%10] → STR/DEX/CON/INT/PTY 중 1 증가
+- HP/MP 증가: class_stats[class].hp/mp per level
+- 최대 레벨: 201 (일반), 관리자 급 INVINCIBLE~DM 별도
+```
+
+### 11.12 통신 시스템
+
+```
+- say (말하기): 같은 방 전달
+- broadcast: b_all() → 전체 서버
+- whisper: 귓속말
+- 외침: shout → 전체
+- 클랜 채팅: family 기반
+- DM 전용: b_wiz() → 관리자만
+```
+
+### 11.13 DB 설계 포인트
+
+| 메커닉 | 필요 테이블/필드 |
+|--------|-----------------|
+| 기여도 경험치 | `combat_log` (attacker, target, damage) — 실시간 분배 |
+| 상주 몬스터 | `room_perm_mobs` (room_vnum, mob_vnum, respawn_interval) |
+| 퀘스트 순차 | `quest_progress` (player_id, quest_slot, completed) |
+| 랜덤 스폰 | `room_random_mobs` (room_vnum, mob_vnum, traffic_threshold) |
+| 클랜전 | `clan_wars` (clan1, clan2, score1, score2, status) |
+| 무술대회 | `musul_ranking` (class, rank, player_name) |
+| 숙련도 | `player_proficiencies` (player_id, weapon_type, points) |
+| 마법 영역 | `player_realms` (player_id, realm_type, points) |
+| d30 전투 | 전투 시스템: d30 기반 (tbaMUD d20과 다름) |

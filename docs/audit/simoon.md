@@ -1,6 +1,6 @@
 # Simoon (CircleMUD 3.0 한국어 커스텀) 데이터 전수조사
 
-> 최종 업데이트: 2026-02-11 | 심층 분석 완료
+> 최종 업데이트: 2026-02-12 | 심층 분석 + 런타임 차이점 분석 완료
 
 ## 1. 아키텍처
 
@@ -160,3 +160,130 @@ Simoon은 CircleMUD 기반이라 tbaMUD와 구조가 거의 동일.
 1. **전투 메시지 파서** — tbaMUD 파서 재사용 (encoding="euc-kr"), 한국어 조사 변수($j/$g/$d/$C/$v/$D) 인식
 2. **텍스트 파일 추출** — 9개 파일 (EUC-KR → UTF-8 변환)
 3. (선택) clan 데이터 — 클랜 시스템 정보
+
+---
+
+## 7. 런타임 메커닉 — tbaMUD 대비 차이점
+
+> 소스: `src/fight.c`, `src/limits.c`, `src/class.c` 분석
+
+### 7.1 tbaMUD와 동일한 부분
+
+- 기본 전투 흐름: violence_update → multi_hit → hit → damage
+- 사망 상태 임계값: HP -11 이하 DEAD, -6~-10 MORTAL, -3~-5 INCAP
+- HP/MANA/MOVE 회복: graf() 연령 기반, 위치별 배수 (sleeping/resting/sitting)
+- Sanctuary: 데미지 1/2 감소
+- backstab_mult(level) 배수 함수
+
+### 7.2 THAC0 계산 — 대폭 간소화
+
+```
+tbaMUD: THAC0 = class_table[class][level] (클래스별 레벨 테이블)
+Simoon: PC → THAC0 = 1 (고정!)
+        NPC → THAC0 = 20
+        레벨 30 미만: += (20 - level) 페널티
+        지능 보정: -= (INT - 13) / 1.5
+        지혜 보정: -= (WIS - 13) / 1.5
+```
+
+**핵심 차이**: PC는 THAC0 1 고정 → 30레벨 이후 거의 100% 명중. INT/WIS가 명중에 영향.
+
+### 7.3 다타공격 — 레벨 기반 + 랜덤
+
+```
+tbaMUD: 2nd/3rd attack 스킬 확률 기반
+Simoon:
+  레벨 150+: 5회
+  레벨 100+: 4회
+  레벨 50+:  3회
+  레벨 30+:  3회
+  레벨 20+:  2회
+  레벨 5+:   2회
+
+  랜덤 추가: 10% 확률 +1회, 희귀 확률 +2회
+```
+
+NPC는 mob_specials의 attack1/attack2/attack3 확률 필드로 다중 공격.
+
+### 7.4 반격 스킬 (SKILL_REATT)
+
+tbaMUD에 없는 Simoon 전용 기능:
+
+```
+10% 확률, 피해자 레벨 ≥ 공격자 레벨:
+→ 공격자가 자기 데미지를 받음 (반사 피해)
+```
+
+### 7.5 활/화살 시스템 (헌터)
+
+```
+ITEM_ARROW + ITEM_BOW 장비 조합
+화살 무게 -= 1 (소모)
+데미지 = (bow.value1 + bow.value2) * 2
+```
+
+### 7.6 사망 패널티 — tbaMUD와 크게 다름
+
+```
+PvP 사망: 경험치/아이템 손실 없음, HP/MANA/MOVE 완전 복구, 부활 장소 이동
+          + 킬마크 지급: (HP+MANA) / 150,000
+
+PvM 사망 (레벨 50+):
+  - maxHP -= random(10, 30)  (200 이하 시 미적용)
+  - maxMANA -= random(10, 30)
+  - maxMOVE -= random(10, 30)
+  - 크리스탈 -= random(30, 90)
+  - 골드 -= random(30,000 ~ 90,000)
+```
+
+**tbaMUD는 경험치 손실만**, Simoon은 **능력치 영구 감소**.
+
+### 7.7 환생 (Remort) 시스템 — 303레벨
+
+```
+레벨 303 + 필요 경험치 도달:
+  → 경험치 50,100,000 고정
+  → 환생 플래그 (RMT_FLAGS) 설정
+  → 7 클래스 모두 환생 완료 시: maxHP = maxMANA = 100,000
+```
+
+### 7.8 이중 화폐
+
+| 화폐 | 획득 | 용도 |
+|------|------|------|
+| 골드 | 전투/퀘스트 | 일반 상점 |
+| 크리스탈 | 레벨업 자동 지급 | 특수 상점, 환생 비용 |
+| 킬마크 | PvP 승리, 퀘스트 | 특수 아이템, 랭킹 |
+
+### 7.9 퀘스트 시스템 (16개, tbaMUD에 없음)
+
+| 타입 | 코드 | 설명 |
+|------|------|------|
+| AQ_OBJECT | 0 | 아이템 획득 |
+| AQ_ROOM | 1 | 특정 방 도달 |
+| AQ_MOB_FIND | 2 | 몹 발견 |
+| AQ_MOB_KILL | 3 | 몹 처치 |
+| AQ_MOB_SAVE | 4 | 몹 구출 |
+| AQ_RETURN_OBJ | 5 | 아이템 반납 |
+
+자동 트리거: `autoquest_trigger_check()` — 몹 사망/아이템 획득 시 자동 체크.
+
+### 7.10 회복 차이
+
+```
+tbaMUD 기본 + Simoon 추가:
+  - ITEM_MANA_REGEN 장비: 착용당 +10 MANA 회복
+  - ROOM_GOOD_REGEN 방: HP x4, MANA x2, MOVE x2
+  - ADV_FAST_REGEN 장점: HP +2
+```
+
+### 7.11 DB 설계 포인트 (tbaMUD 대비 추가)
+
+| 런타임 요소 | DB/엔진 적용 |
+|-------------|-------------|
+| 크리스탈/킬마크 | players 테이블 추가 컬럼 |
+| 환생 플래그 | players.extensions JSONB |
+| 퀘스트 시스템 | quests + quest_progress 테이블 |
+| PvP 킬마크 | 인메모리 + 주기적 저장 |
+| 능력치 사망 패널티 | maxHP/maxMANA/maxMOVE 직접 감소 (players) |
+| 한국어 조사 | 엔진 core/korean.py (has_batchim + 조사 선택) |

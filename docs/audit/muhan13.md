@@ -1,6 +1,6 @@
 # Muhan13 (무한던전, Mordor 2.0) 데이터 전수조사
 
-> 최종 업데이트: 2026-02-11 | 심층 분석 완료
+> 최종 업데이트: 2026-02-12 | 심층 분석 + 런타임 차이점 분석 완료
 
 ## 1. 아키텍처
 
@@ -271,3 +271,118 @@ creature/object/room struct 필드 순서가 다르므로 별도 파서 필요:
 - 게시판 데이터 (18개 디렉토리)
 - rndtalk 파일 (3eyes에 없는 포맷)
 - 클랜 데이터 (family_*)
+
+---
+
+## 10. 런타임 메커닉 — 3eyes 대비 차이점
+
+> 소스: `src/command5.c`, `src/creature.c`, `src/global.c`, `src/bank.c` 분석
+
+### 10.1 3eyes와 동일한 부분
+
+- **THAC0 공식**: `mrand(1,30) >= thaco - armor/10` (d30 기반 동일)
+- **기본 전투 흐름**: attack_crt() 구조 동일
+- **사망 경험치 패널티**: 레벨 20 이하 1/20, 이상 1/15 또는 100,000 고정
+- **다단 공격**: PUPDMG 플래그 시 count++ (최대 3회)
+- **무기 숙련도**: proficiency[5] (SHARP/THRUST/BLUNT/POLE/MISSILE)
+- **마법 영역**: realm[4] (EARTH/WIND/FIRE/WATER)
+- **방어도**: thaco - armor/8 보정, bonus[] 배열
+
+### 10.2 creature2 — 확장 구조체 (3eyes에 없음)
+
+```c
+typedef struct creature2 {
+    char title[80];        // 칭호 (who 표시)
+    long bank;             // 은행 잔액
+    otag *inventory_box;   // 은행 아이템 보관
+    int  alias_num;        // 별명 수
+    char flags[16];        // 확장 플래그 (128비트)
+    int  empty[1024-27];   // 패딩 (총 4096B)
+} creature2;
+```
+
+플레이어당 2개 파일 관리: creature(1184B) + creature2(4096B).
+
+### 10.3 은행 시스템 (bank.c)
+
+3eyes에 없는 muhan13 전용 시스템:
+
+| 기능 | 명령어 | 설명 |
+|------|--------|------|
+| 입금 | 입금 | 골드 예치 |
+| 출금 | 찾기 | 골드 인출 |
+| 잔액 | 예금잔고 | 잔액 확인 |
+| 아이템 보관 | 은행 | 아이템 저장소 |
+
+저장: `PLAYERPATH/bank/플레이어명` 파일.
+방 플래그: RBANK(39) — 은행 이용 가능 방.
+
+### 10.4 가문(클랜) 시스템 — 전쟁 기능 추가
+
+```
+16개 가문 슬롯: family_str[16], fmboss_str[16]
+AT_WAR 전역 변수 — 가문 간 전쟁 상태
+check_war() — 전쟁 판정 함수
+가문장 사망 시 → 전쟁 종료
+
+플래그: PFAMIL(가문 소속), PFMBOS(가문장)
+명령어: 문중가입/문중원/문중/선전포고 등 7개
+```
+
+### 10.5 결혼/이혼 시스템
+
+```
+방 플래그: RONMAR(40) 결혼식장, RMARRI(41) 결혼 관련
+명령어: 결혼/이혼/상대자
+저장: player/marriage/ 디렉토리
+```
+
+### 10.6 제련/달돌 시스템
+
+```
+제련: 특정 방(RFORGE=35)에서 달돌+무기 → 능력치 향상
+달돌: moon_set() / dm_moonstone() / update_moonstone()
+명령어: 제련/무기만들기
+```
+
+### 10.7 게시판 시스템 (board.c, 13KB)
+
+3eyes는 board_index 바이너리, muhan13은 **파일 기반 객체 게시판**:
+
+```
+18개 게시판 디렉토리: info, user, family1-15, 일반
+게시판 인덱스: 256B per 글
+명령어: 글/글삭제/게시판
+```
+
+### 10.8 칭호 시스템
+
+```
+creature2->title[80]에 저장
+명령어: 칭호/칭호변경
+who 명령 시 이름 옆에 표시
+```
+
+### 10.9 사망 처리 차이
+
+```
+3eyes와 동일:
+  - 경험치 패널티: level_exp 차이의 3/4
+  - 영혼방 이동
+
+muhan13 추가:
+  - 전쟁 중 비생존 방에서 사망: 착용 장비 드롭
+  - 부활: 방 1008 (회복의 방)
+```
+
+### 10.10 DB 설계 포인트 (3eyes 대비 추가)
+
+| 런타임 요소 | DB/엔진 적용 |
+|-------------|-------------|
+| creature2 | players 테이블 확장 (title, bank 컬럼 추가) |
+| 은행 시스템 | bank_items 테이블 또는 players.bank JSONB |
+| 가문 전쟁 | clans 테이블 + 전쟁 상태 (인메모리) |
+| 결혼 | players.spouse 컬럼 |
+| 제련/달돌 | crafting_recipes 테이블 또는 런타임 전용 |
+| 게시판 | boards + board_posts 테이블 |
+| 칭호 | players.title 컬럼 |

@@ -1,6 +1,6 @@
 # 10woongi (LP-MUD/FluffOS) 데이터 전수조사
 
-> 최종 업데이트: 2026-02-11 | 심층 분석 완료
+> 최종 업데이트: 2026-02-12 | 심층 분석 + 런타임 메커닉 분석 완료
 
 ## 1. 디렉토리 구조
 
@@ -679,3 +679,237 @@ cmdCLOSE(str)       // 닫기
 4. **NPC 특수유형 파서** — merchant/dealer/healer/banker 인식
 5. **문파 데이터 파서** — 7개 문파 설정 추출
 6. **문서 → 도움말 변환** — 29개 문서 파일을 help_entries에 추가
+
+---
+
+## 14. 런타임 메커닉
+
+> 소스: `lib/구조/monster.c`, `player.c`, `플레이어/바디.c`, `플레이어/플레이어바디.c` 심층 분석
+
+### 14.1 타이밍 — LPC heart_beat
+
+FluffOS `set_heart_beat(1)` = **1초** 주기. 모든 전투/이동/회복이 이 틱에 연동.
+
+**플레이어 heart_beat** (player.c:1931):
+
+| 순서 | 처리 | 조건 |
+|------|------|------|
+| 1 | Age 업데이트 | `time() - LastAge > AGE_UPDATE_TIME` |
+| 2 | 유휴 접속 해제 | `query_idle() > ILDE_CUT_TIME` (제작자 제외) |
+| 3 | 자동 저장 | `time() - LastSave > AUTOSAVE_TIME` |
+| 4 | healBody() | 매 틱 |
+| 5 | 배고픔 감소 | subRealFood(1), 금석단 시 2 |
+| 6 | countPoison(1) | 매 틱 |
+| 7 | capTankerTurnCount(1) | 탱커 전환 턴 |
+| 8 | **continueCombat()** | 전투 루프 |
+| 9 | 수련장 경험치 | 방 prop "수련장"=1 + 전투 중 |
+| 10 | 천무진공신법 | 카운트 소진 시 해제 |
+| 11 | 기타 | 몽롱/은신/결혼/술/미혼 등 |
+
+**몬스터 heart_beat** (monster.c:424):
+
+| 순서 | 처리 | 조건 |
+|------|------|------|
+| 1 | heartFunc | 커스텀 콜백 함수 |
+| 2 | Chat 발화 | `random(100) < ChatChance` |
+| 3 | Wander 이동 | `Wander > random(100)`, noAttackWander 검사 |
+| 4 | healBody() | 매 틱 |
+| 5 | countPoison(1) | 매 틱 |
+| 6 | capTankerTurnCount(1) | 탱커 전환 턴 |
+| 7 | **continueCombat()** | 전투 루프 |
+
+### 14.2 전투 — 턴 기반 시스템
+
+10woongi 전투는 **heart_beat 구동 턴 시스템**. others_turn/back_turn 카운터로 행동 딜레이 제어.
+
+**변수**:
+
+| 변수 | 용도 |
+|------|------|
+| `others_turn` | 기술 시전 턴 대기 (0이면 행동 가능) |
+| `back_turn` | 반격 턴 대기 |
+| `Attackers[]` | 현재 교전 중인 대상 배열 |
+| `outside_skill[]` | 자신에게 걸린 외부 기술 |
+| `defence_path` | 방어 루틴 콜백 경로 |
+
+**continueCombat() 흐름** (바디.c:1782):
+
+```
+1. countTurn()          — others_turn-- (0까지)
+2. countBackTurn()      — back_turn-- (0까지)
+3. 사망 판정:
+   - 몬스터(몹종류=0): HP ≤ 0 → eventDie()
+   - 몬스터(몹종류=1): HP ≤ 0 AND SP ≤ 0 → eventDie()
+   - 플레이어: HP ≤ 0 → eventDie()
+4. Attackers 비어있으면 → 리턴
+5. ClearAttackers()     — 같은 방에 없는 공격자 제거, 0명이면 stopCombat()
+6. AutoHandAttack()     — 기본 맨손/무기 공격
+7. 천풍광환추가          — prop("천풍광환횟수")만큼 AutoHandAttack 반복
+8. SpecialAttack()      — 몬스터 AI 특수 기술 (setSpecialSkillAI)
+```
+
+### 14.3 전투 — 공격 개시
+
+**startAttack()** (바디.c:788):
+
+```
+1. Attackers 배열에 대상 추가
+2. 첫 번째↔마지막 요소 스왑 (새 적이 주 타겟이 됨)
+3. 대상.startAttack(this) → 양방향 교전 등록
+4. attackFunc 콜백 실행 (설정된 경우)
+```
+
+**stopCombat()** (바디.c:818):
+
+```
+1. Attackers = {}
+2. 현재 기술/반격기술 endSkill 호출
+3. outside_skill 전부 endSkill
+4. others_turn = 0, back_turn = 0, capTankerTurn = 0
+5. "전투무장이 해제됩니다." 메시지
+```
+
+### 14.4 방어 공식
+
+**일반 물리 방어 — autoDefence()** (바디.c:944):
+
+```
+c_damage = (민첩*8/100) + (totalArmor/4) + (투지/20)
+
+투지 보정: 투지 < 레벨이면 투지=0, 레벨≤30이면 투지=0
+           그 외 투지 = 투지 - 레벨
+
+말 탑승 보너스: + 기골/25
+랜덤세팅타입: 1이면 x2, 2이면 /2
+
+탱커 시스템: capTanker가 설정되면 탱커에게 데미지 전가
+외부 기술: outside_skill[]의 autoDefence 콜백 순차 적용
+
+최종: ret = damage - c_damage (0 이상)
+```
+
+**내공 방어 — autoSpDefence()** (바디.c:996):
+
+```
+c_damage = ((내공*6 + 민첩*2)/110) + (totalSpArmor/4) + (투지/20)
+
+(이하 물리 방어와 동일한 말/랜덤세팅/탱커/외부기술 보정)
+```
+
+**기술 방어 — skillDefence()** (바디.c:1050):
+
+```
+1. "방어기술경로" prop → 방어 콜백 호출
+2. "내공열화방어기" prop → 내공열화 방어 콜백 호출
+3. 탱커 전가 (물리 방어와 동일)
+4. attr=0 → totalArmor 차감, attr=100 → totalSpArmor 차감
+5. 회피 판정: 내 민첩/적 민첩 비율 → 3% 최소 회피 확률
+   random(100) < (sourceMin/targetMin) → 완전 회피 (damage=0)
+6. defence_path 콜백 호출
+```
+
+### 14.5 몬스터 사망 — eventDie()
+
+**몬스터 사망 흐름** (monster.c:642):
+
+```
+1. "분신" prop이면 → dieFunction만 실행 후 destruct (경험치 없음)
+2. LastAttacker가 신수/카피몹이면 → 주인 플레이어로 교체
+3. firstDieFunction → 사전 사망 콜백
+4. 사망 메시지: "$I 비틀거리더니 그 자리에 철거덕 쓰러졌다."
+5. 인벤토리 드롭 (preventDrop 아이템 제외)
+6. 골드 드롭 (이벤트 배율 적용)
+7. 명성(Fame) 배분:
+   - 레벨 차이 기반: 몬스터레벨 - 공격자레벨 (>1이면 배분)
+   - 그룹: 레벨 비례 배분 (같은 방 멤버만)
+8. 경험치 배분:
+   - ExpType=0 (기본): 1:1이면 60% + 레벨 차이 보너스
+   - ExpType=1 (수치형): exp * (0.5 + 0.002 * 플레이어레벨)
+   - 그룹 배분: 레벨+내공/2+무기레벨*3 비율, 인원수 보너스 (인원*(exp/14))
+   - 이벤트 배율 적용 (미적용 시 기본 2배)
+9. stopCombat() + eventDestruct()
+```
+
+### 14.6 회복 — healBody()
+
+**몬스터 회복** (monster.c:402):
+
+```
+HealCounter 방식 (카운터 0일 때만 회복):
+  - "mob급" ID 포함: 카운터 3 (3초마다 회복)
+  - 일반: 카운터 10 (10초마다 회복)
+
+일반 방:
+  HP += maxHP * 8%
+  SP += maxSP * 9%
+  MP += maxMP * 13%
+
+fast_heal 방:
+  HP += maxHP * 16%
+  SP += maxSP * 18%
+  MP += maxMP * 26%
+```
+
+**플레이어 회복**: player.c:1783 별도 함수 (전투 외 회복, 방 속성 영향)
+
+### 14.7 독 시스템
+
+**독 구조** (바디.c:70):
+
+```c
+poisonBuff = mapping {
+  "timestamp": ({ count, 힘감소, 민첩감소, 지혜감소, 내공감소, 기골감소, 투지감소 })
+}
+```
+
+- setPoison(n, count): 6종 스탯 모두 n만큼 감소, count 틱 지속
+- countPoison(1): 매 heart_beat마다 count-- → 0이면 해제
+- 스탯 감소 상한: 기본 스탯 - 3 (최소 3 보장)
+
+### 14.8 무기 레벨 시스템
+
+```
+weaponLevel    — 기본 무기 레벨 (기본 1)
+spWeaponLevel  — 내공무기 레벨 (기본 1)
+chilboLevel    — 칠보 레벨 (기본 0)
+spArmorLevel   — 내공방어 레벨 (기본 0)
+```
+
+경험치 그룹 배분 시 `getLevel() + 내공/2 + weaponLevel*3`으로 가중치 반영.
+
+### 14.9 수련장 시스템
+
+```
+방 prop "수련장"=1 + "수련장타입" + 전투 중:
+  - 초급: 10,000 heartbeat마다 경험치 1
+  - 중급: 15,000 heartbeat마다 경험치 1
+  - 고급: 20,000 heartbeat마다 경험치 1
+  - 최상급: 30,000 heartbeat마다 경험치 1
+
+saveData("수련시간") 카운터 증가, "수련완료시간" 도달 시 리셋+경험치 지급
+```
+
+### 14.10 플레이어 이탈/저장
+
+| 이벤트 | 처리 |
+|--------|------|
+| 유휴 타임아웃 | `ILDE_CUT_TIME` 초과 → 자동 접속 해제, 로그 기록 |
+| 자동 저장 | `AUTOSAVE_TIME` 주기 → `savePlayer()` |
+| 퇴장 (cmdQUIT) | 전투 중 불가 (강제퇴장 제외), 말 데이터 저장, 낚시 해제, Login="" |
+| 접속 해제 | `net_dead()` — 드라이버 레벨 처리 |
+
+### 14.11 DB 설계 포인트
+
+| 런타임 요소 | DB/엔진 적용 |
+|-------------|-------------|
+| heart_beat 1초 | Python asyncio 1초 tick |
+| others_turn/back_turn | 인메모리, 틱당 감소 |
+| Attackers[] | 인메모리 배열 |
+| healBody 카운터 | 인메모리, 주기적 회복 |
+| autoDefence 공식 | Lua 또는 Python 함수 (스탯 기반) |
+| 독 시스템 | 인메모리 mapping, tick 감소 |
+| 수련장 | 방 속성 + saveData (퍼시스턴트) |
+| 경험치 배분 | ExpType(0/1) + 그룹 비율 계산 |
+| 무기 레벨 | players 테이블 JSONB |
+| 명성(Fame) | players 테이블 컬럼 |
+| 이벤트 배율 | game_configs 또는 런타임 설정 |
