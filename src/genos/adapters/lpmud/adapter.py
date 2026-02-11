@@ -337,7 +337,16 @@ class LPMudAdapter(BaseAdapter):
             except Exception as e:
                 stats.warnings.append(f"Error parsing monster.c formulas: {e}")
 
-        return configs
+        # Deduplicate by key (keep first occurrence)
+        seen: dict[str, int] = {}
+        unique: list = []
+        for gc in configs:
+            if gc.key in seen:
+                logger.debug("Duplicate game_config key=%r, keeping first", gc.key)
+                continue
+            seen[gc.key] = len(unique)
+            unique.append(gc)
+        return unique
 
     def _infer_zones(self, rooms: list, vnum_gen: VnumGenerator) -> list[Zone]:
         """Infer zones from room directory structure."""

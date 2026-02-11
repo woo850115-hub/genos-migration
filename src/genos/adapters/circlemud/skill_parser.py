@@ -122,6 +122,7 @@ def _parse_spello_calls(
 
     # Match spello(...) calls spanning multiple lines
     # We find each spello( and then extract balanced parentheses
+    seen_ids: dict[int, int] = {}  # id -> index in skills list
     for m in re.finditer(r'spello\s*\(', text):
         start = m.end()
         args_text = _extract_balanced_parens(text, start)
@@ -133,6 +134,11 @@ def _parse_spello_calls(
 
         skill = _parse_spello_args(args_text, id_map, has_spell_name)
         if skill:
+            if skill.id in seen_ids:
+                # Duplicate spello() call — keep first (with real values)
+                logger.debug("Duplicate spello id=%d, keeping first", skill.id)
+                continue
+            seen_ids[skill.id] = len(skills)
             skills.append(skill)
 
     return skills
