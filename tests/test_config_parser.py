@@ -648,12 +648,8 @@ class TestCompilerPhase3:
         generate_ddl(uir, out)
         ddl = out.getvalue()
         assert "game_configs" in ddl
-        assert "experience_table" in ddl
-        assert "thac0_table" in ddl
-        assert "saving_throws" in ddl
-        assert "level_titles" in ddl
-        assert "attribute_modifiers" in ddl
-        assert "practice_params" in ddl
+        # 6 legacy tables merged into game_tables
+        assert "game_tables" in ddl
 
     def test_seed_data_phase3(self):
         from io import StringIO
@@ -671,12 +667,14 @@ class TestCompilerPhase3:
         generate_seed_data(uir, out)
         sql = out.getvalue()
         assert "INSERT INTO game_configs" in sql
-        assert "INSERT INTO experience_table" in sql
-        assert "INSERT INTO thac0_table" in sql
-        assert "INSERT INTO saving_throws" in sql
-        assert "INSERT INTO level_titles" in sql
-        assert "INSERT INTO attribute_modifiers" in sql
-        assert "INSERT INTO practice_params" in sql
+        # All 6 legacy tables now go into game_tables
+        assert "INSERT INTO game_tables" in sql
+        assert "exp_table" in sql
+        assert "thac0" in sql
+        assert "saving_throw" in sql
+        assert "level_title" in sql
+        assert "stat_bonus" in sql
+        assert "practice" in sql
 
     def test_lua_config_generation(self):
         from io import StringIO

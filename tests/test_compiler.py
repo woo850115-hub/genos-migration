@@ -123,10 +123,17 @@ def test_generate_ddl():
     sql = out.getvalue()
     assert "CREATE TABLE" in sql
     assert "rooms" in sql
-    assert "items" in sql
-    assert "monsters" in sql
+    assert "room_exits" in sql
+    assert "mob_protos" in sql
+    assert "item_protos" in sql
     assert "zones" in sql
-    assert "triggers" in sql
+    assert "skills" in sql
+    assert "game_tables" in sql
+    assert "game_configs" in sql
+    assert "players" in sql
+    assert "TEXT[]" in sql  # tag arrays
+    assert "JSONB" in sql
+    assert "GIN" in sql  # GIN indexes
 
 
 def test_generate_seed_data():
@@ -136,8 +143,9 @@ def test_generate_seed_data():
     sql = out.getvalue()
     assert "INSERT INTO rooms" in sql
     assert "The Void" in sql
-    assert "INSERT INTO items" in sql
-    assert "INSERT INTO monsters" in sql
+    assert "INSERT INTO room_exits" in sql
+    assert "INSERT INTO item_protos" in sql
+    assert "INSERT INTO mob_protos" in sql
     assert "INSERT INTO classes" in sql
     # Verify zone reset_commands use "command" key (not "cmd") for engine compatibility
     assert '"command": "M"' in sql
@@ -272,7 +280,7 @@ def test_full_pipeline(tmp_path):
     seed_path = tmp_path / "sql" / "seed_data.sql"
     seed_sql = seed_path.read_text()
     assert "INSERT INTO rooms" in seed_sql
-    assert "INSERT INTO monsters" in seed_sql
+    assert "INSERT INTO mob_protos" in seed_sql
 
     # Check Lua is valid
     combat_path = tmp_path / "lua" / "combat.lua"

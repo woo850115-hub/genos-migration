@@ -378,7 +378,6 @@ class TestDbGenerator:
 
         assert "CREATE TABLE IF NOT EXISTS socials" in ddl
         assert "CREATE TABLE IF NOT EXISTS help_entries" in ddl
-        assert "CREATE TABLE IF NOT EXISTS commands" in ddl
         assert "CREATE TABLE IF NOT EXISTS skills" in ddl
         assert "CREATE TABLE IF NOT EXISTS races" in ddl
 
@@ -394,7 +393,7 @@ class TestDbGenerator:
 
         assert "INSERT INTO socials" in sql
         assert "'wave'" in sql
-        assert "'You wave.'" in sql
+        assert "You wave." in sql
 
     def test_seed_help(self):
         from genos.compiler.db_generator import generate_seed_data
@@ -409,7 +408,8 @@ class TestDbGenerator:
         assert "INSERT INTO help_entries" in sql
         assert "LOOK" in sql
 
-    def test_seed_commands(self):
+    def test_seed_commands_removed(self):
+        """Commands table was removed in v1.0 — commands are Lua-driven now."""
         from genos.compiler.db_generator import generate_seed_data
 
         uir = UIR()
@@ -419,9 +419,8 @@ class TestDbGenerator:
         generate_seed_data(uir, buf)
         sql = buf.getvalue()
 
-        assert "INSERT INTO commands" in sql
-        assert "'north'" in sql
-        assert "'do_move'" in sql
+        # Commands are no longer seeded as a separate table
+        assert "INSERT INTO commands" not in sql
 
     def test_seed_skills(self):
         from genos.compiler.db_generator import generate_seed_data
