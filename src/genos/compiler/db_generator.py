@@ -708,8 +708,14 @@ def _sql_arr(tags: list[str]) -> str:
     """Format a Python list as a PostgreSQL TEXT[] literal."""
     if not tags:
         return "'{}'::TEXT[]"
-    inner = ",".join(f'"{t}"' for t in tags)
-    return f"'{{{inner}}}'::TEXT[]"
+    escaped = []
+    for t in tags:
+        t = t.replace("\\", "\\\\").replace('"', '\\"')
+        escaped.append(f'"{t}"')
+    inner = ",".join(escaped)
+    # Escape single quotes for the outer SQL string literal
+    inner_esc = inner.replace("'", "''")
+    return f"'{{{inner_esc}}}'::TEXT[]"
 
 
 def _dice_median(dice: Any) -> int:
