@@ -572,7 +572,9 @@ def _seed_quests(uir: UIR, out: TextIO) -> None:
             chain["next"] = q.next_quest
         lvl_range = "NULL"
         if q.min_level > 0 or q.max_level > 0:
-            lvl_range = f"'[{q.min_level},{q.max_level + 1})'"
+            lo = min(q.min_level, q.max_level) if q.max_level > 0 else q.min_level
+            hi = max(q.min_level, q.max_level)
+            lvl_range = f"'[{lo},{hi + 1})'"
         out.write(
             f"INSERT INTO quests (vnum, name, description, quest_type, "
             f"level_range, giver_vnum, target, rewards, chain) VALUES "
